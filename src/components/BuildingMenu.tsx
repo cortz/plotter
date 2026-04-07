@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { BUILDING_DEFS } from '../modules/BuildingManager'
 import { CropManager } from '../modules/CropManager'
@@ -16,17 +16,24 @@ export function BuildingMenu() {
   const plantCrop = useGameStore(s => s.plantCrop)
   const placeBuilding = useGameStore(s => s.placeBuilding)
   const grid = useGameStore(s => s.grid)
+  const plots = useGameStore(s => s.plots)
 
   const [view, setView] = useState<View>('choose')
 
-  // Determine the active tile (from building menu or planting menu)
+  // Reset to choose view whenever a new tile is selected
+  useEffect(() => {
+    if (buildingMenuTile) setView('choose')
+  }, [buildingMenuTile?.x, buildingMenuTile?.y])
+
   const tile = buildingMenuTile
 
   if (!tile) return null
 
   const tileType = grid[tile.y]?.[tile.x]?.type
-  // Plots can only plant (no new building on an already-plotted tile)
-  const canBuild = tileType === 'unlocked'
+  const plotState = plots[`${tile.x},${tile.y}`]
+  // Allow building on any empty tile (unlocked or previously-used plot with no crop)
+  const canBuild = tileType === 'unlocked' ||
+    (tileType === 'plot' && (!plotState || plotState.status === 'empty'))
 
   const crops = CropManager.getAllCrops()
   const bestCrops = getBestCropsForSeason(currentSeason)

@@ -175,14 +175,20 @@ export const useGameStore = create<Store>((set, get) => ({
   placeBuilding: (x, y, type) => {
     const s = get()
     const tile = s.grid[y][x]
-    if (tile.type !== 'unlocked') return
+    const key = `${x},${y}`
+    const plotState = s.plots[key]
+    const isEmptyPlot = tile.type === 'plot' && (!plotState || plotState.status === 'empty')
+    if (tile.type !== 'unlocked' && !isEmptyPlot) return
     const def = BUILDING_DEFS[type]
     if (s.balance < def.cost) return
 
-    const key = `${x},${y}`
     const newGrid = s.grid.map(row => row.map(t => ({ ...t })))
     newGrid[y][x] = { x, y, type: 'building' }
     const gridWithRoads = recomputeRoads(newGrid)
+
+    // Clean up any leftover plot state
+    const newPlots = { ...s.plots }
+    delete newPlots[key]
 
     const newBuildings: Record<string, BuildingData> = {
       ...s.buildings,
@@ -192,6 +198,7 @@ export const useGameStore = create<Store>((set, get) => ({
     const next: GameState = {
       ...s,
       grid: gridWithRoads,
+      plots: newPlots,
       buildings: newBuildings,
       balance: s.balance - def.cost,
       buildingMenuTile: null,
