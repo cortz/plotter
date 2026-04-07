@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { SEASON_CONFIGS, getSeasonProgress, getBestCropsForSeason } from '../modules/SeasonManager'
 import { CropManager } from '../modules/CropManager'
@@ -5,6 +6,13 @@ import { CropManager } from '../modules/CropManager'
 export function SeasonBadge() {
   const currentSeason = useGameStore(s => s.currentSeason)
   const seasonStartedAt = useGameStore(s => s.seasonStartedAt)
+  const [, setTick] = useState(0)
+
+  // Re-render every second so the progress bar moves
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const config = SEASON_CONFIGS[currentSeason]
   const progress = getSeasonProgress(seasonStartedAt)
