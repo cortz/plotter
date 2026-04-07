@@ -119,7 +119,7 @@ export class SceneManager {
       this.dragDist += Math.sqrt(dx * dx + dy * dy)
       if (this.dragDist > DRAG_THRESHOLD) {
         const speed = 0.025
-        this.lookTarget.addScaledVector(this.PAN_RIGHT, -dx * speed)
+        this.lookTarget.addScaledVector(this.PAN_RIGHT, dx * speed)
         this.lookTarget.addScaledVector(this.PAN_DOWN, -dy * speed)
         this.positionCamera()
       }
