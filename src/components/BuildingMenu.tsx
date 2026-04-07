@@ -26,20 +26,6 @@ export function BuildingMenu() {
     if (buildingMenuTile) setView('choose')
   }, [buildingMenuTile?.x, buildingMenuTile?.y])
 
-  const tile = buildingMenuTile
-
-  if (!tile) return null
-
-  const tileType = grid[tile.y]?.[tile.x]?.type
-  const plotState = plots[`${tile.x},${tile.y}`]
-  // Allow building on any empty tile (unlocked or previously-used plot with no crop)
-  const canBuild = tileType === 'unlocked' ||
-    (tileType === 'plot' && (!plotState || plotState.status === 'empty'))
-
-  const crops = CropManager.getAllCrops()
-  const bestCrops = getBestCropsForSeason(currentSeason)
-  const seasonConfig = SEASON_CONFIGS[currentSeason]
-
   const close = useCallback(() => {
     setBuildingMenuTile(null)
     setSelectedTile(null)
@@ -47,6 +33,19 @@ export function BuildingMenu() {
   }, [setBuildingMenuTile, setSelectedTile])
 
   useEscapeKey(close)
+
+  const tile = buildingMenuTile
+
+  if (!tile) return null
+
+  const tileType = grid[tile.y]?.[tile.x]?.type
+  const plotState = plots[`${tile.x},${tile.y}`]
+  const canBuild = tileType === 'unlocked' ||
+    (tileType === 'plot' && (!plotState || plotState.status === 'empty'))
+
+  const crops = CropManager.getAllCrops()
+  const bestCrops = getBestCropsForSeason(currentSeason)
+  const seasonConfig = SEASON_CONFIGS[currentSeason]
 
   const handlePlant = (cropType: CropType) => {
     plantCrop(tile.x, tile.y, cropType)
