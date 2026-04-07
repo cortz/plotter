@@ -1,0 +1,24 @@
+import type { TileData } from '../types'
+
+const GRID_SIZE = 9
+const CENTER = Math.floor(GRID_SIZE / 2) // 4
+const BASE_COST = 50
+const COST_PER_DISTANCE = 15
+
+export const LandExpansionManager = {
+  getLandCost: (x: number, y: number): number => {
+    const dist = Math.abs(x - CENTER) + Math.abs(y - CENTER)
+    return BASE_COST + dist * COST_PER_DISTANCE
+  },
+
+  isAdjacentToUnlocked: (grid: TileData[][], x: number, y: number): boolean => {
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const nx = x + dx
+      const ny = y + dy
+      if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+        if (grid[ny][nx].type !== 'locked') return true
+      }
+    }
+    return false
+  },
+}

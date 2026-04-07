@@ -1,0 +1,49 @@
+import { useEffect } from 'react'
+import { GameCanvas } from './components/GameCanvas'
+import { HUD } from './components/HUD'
+import { MarketPanel } from './components/MarketPanel'
+import { PlantingMenu } from './components/PlantingMenu'
+import { Tooltip } from './components/Tooltip'
+import { useGameStore } from './store/gameStore'
+
+function App() {
+  const loadGame = useGameStore(s => s.loadGame)
+
+  useEffect(() => {
+    loadGame()
+  }, [])
+
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: '#1a2e0d',
+      fontFamily: '"Segoe UI", system-ui, sans-serif',
+      overflow: 'hidden',
+    }}>
+      {/* Three.js canvas fills the screen */}
+      <GameCanvas />
+
+      {/* React UI overlays */}
+      <HUD />
+      <MarketPanel />
+      <PlantingMenu />
+      <Tooltip />
+
+      {/* Title watermark */}
+      <div style={{
+        position: 'absolute',
+        bottom: 12,
+        left: 12,
+        color: 'rgba(200,200,200,0.3)',
+        fontSize: 12,
+        pointerEvents: 'none',
+        userSelect: 'none',
+      }}>
+        🌾 Plot — drag to pan · click tiles to interact
+      </div>
+    </div>
+  )
+}
+
+export default App

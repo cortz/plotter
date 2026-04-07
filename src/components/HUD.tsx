@@ -1,0 +1,78 @@
+import { useGameStore } from '../store/gameStore'
+import { CropManager } from '../modules/CropManager'
+
+export function HUD() {
+  const balance = useGameStore(s => s.balance)
+  const inventory = useGameStore(s => s.inventory)
+  const toggleMarket = useGameStore(s => s.toggleMarket)
+  const marketOpen = useGameStore(s => s.marketOpen)
+
+  const crops = CropManager.getAllCrops()
+  const totalCrops = crops.reduce((acc, c) => acc + (inventory[c.type] ?? 0), 0)
+
+  return (
+    <div style={{
+      position: 'absolute', top: 12, left: 12, right: 12,
+      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+      pointerEvents: 'none', zIndex: 10,
+    }}>
+      {/* Balance & inventory */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <Panel>
+          <span style={{ fontSize: 22, lineHeight: 1 }}>💰</span>
+          <span style={{ fontWeight: 700, fontSize: 18 }}>{balance}</span>
+        </Panel>
+
+        {totalCrops > 0 && (
+          <Panel>
+            {crops.filter(c => (inventory[c.type] ?? 0) > 0).map(c => (
+              <span key={c.type} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {c.emoji} <strong>{inventory[c.type]}</strong>
+              </span>
+            ))}
+          </Panel>
+        )}
+      </div>
+
+      {/* Market button */}
+      <button
+        onClick={toggleMarket}
+        style={{
+          pointerEvents: 'all',
+          background: marketOpen ? '#5a3a1a' : '#8B5E3C',
+          color: '#fff',
+          border: '2px solid #c8903a',
+          borderRadius: 10,
+          padding: '8px 16px',
+          fontSize: 15,
+          fontWeight: 700,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+        }}
+      >
+        🏪 Market
+      </button>
+    </div>
+  )
+}
+
+function Panel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      background: 'rgba(20,12,5,0.75)',
+      backdropFilter: 'blur(4px)',
+      border: '1px solid rgba(200,160,60,0.4)',
+      borderRadius: 10,
+      padding: '6px 12px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      color: '#f5e6c8',
+      fontFamily: 'inherit',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    }}>
+      {children}
+    </div>
+  )
+}
