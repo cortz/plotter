@@ -1,16 +1,20 @@
 import { useGameStore } from '../store/gameStore'
 import { CropManager } from '../modules/CropManager'
+import { getAdjustedGrowDuration, getBestCropsForSeason, SEASON_CONFIGS } from '../modules/SeasonManager'
 import type { CropType } from '../types'
 
 export function PlantingMenu() {
   const selectedTile = useGameStore(s => s.selectedTile)
   const balance = useGameStore(s => s.balance)
+  const currentSeason = useGameStore(s => s.currentSeason)
   const setSelectedTile = useGameStore(s => s.setSelectedTile)
   const plantCrop = useGameStore(s => s.plantCrop)
 
   if (!selectedTile) return null
 
   const crops = CropManager.getAllCrops()
+  const bestCrops = getBestCropsForSeason(currentSeason)
+  const seasonConfig = SEASON_CONFIGS[currentSeason]
 
   return (
     <div
@@ -48,6 +52,12 @@ export function PlantingMenu() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {crops.map(crop => {
             const canAfford = balance >= crop.seedCost
+            const adjDuration = getAdjustedGrowDuration(crop.growDuration, crop.type, currentSeason)
+            const isBest = bestCrops[0] === crop.type
+            const growthMod = seasonConfig.growthMod[crop.type]
+            const modLabel = growthMod < 1 ? `⚡ ${Math.round((1 - growthMod) * 100)}% faster`
+              : growthMod > 1 ? `🐢 ${Math.round((growthMod - 1) * 100)}% slower`
+              : null
             return (
               <button
                 key={crop.type}
@@ -59,22 +69,34 @@ export function PlantingMenu() {
                   gap: 14,
                   padding: '12px 16px',
                   borderRadius: 10,
-                  border: canAfford ? '1px solid rgba(200,160,60,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                  border: isBest && canAfford
+                    ? '1px solid rgba(255,215,0,0.6)'
+                    : canAfford ? '1px solid rgba(200,160,60,0.5)' : '1px solid rgba(255,255,255,0.1)',
                   background: canAfford ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)',
                   color: canAfford ? '#f5e6c8' : '#555',
                   cursor: canAfford ? 'pointer' : 'not-allowed',
                   fontFamily: 'inherit',
                   textAlign: 'left',
                   transition: 'background 0.15s',
+                  position: 'relative',
                 }}
                 onMouseEnter={e => canAfford && ((e.currentTarget as HTMLButtonElement).style.background = 'rgba(200,160,60,0.15)')}
                 onMouseLeave={e => canAfford && ((e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.08)')}
               >
+                {isBest && (
+                  <span style={{
+                    position: 'absolute', top: -8, right: 10,
+                    background: 'rgba(255,215,0,0.9)', color: '#222',
+                    fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px',
+                  }}>🌟 Best this season</span>
+                )}
                 <span style={{ fontSize: 28 }}>{crop.emoji}</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{crop.name}</div>
                   <div style={{ fontSize: 12, color: canAfford ? '#a89070' : '#444', marginTop: 2 }}>
-                    Seed: {crop.seedCost} 💰 · Grows in {formatDuration(crop.growDuration)} · Sells for {crop.sellPrice} 💰
+                    Seed: {crop.seedCost} 💰 · Grows in {formatDuration(adjDuration)}
+                    {modLabel && <span style={{ marginLeft: 4, color: growthMod < 1 ? '#6ef080' : '#f0a060' }}>{modLabel}</span>}
+                    {' · '}Sells for {crop.sellPrice} 💰
                   </div>
                 </div>
                 {!canAfford && (

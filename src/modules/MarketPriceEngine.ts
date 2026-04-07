@@ -77,17 +77,19 @@ export class MarketPriceEngine {
     return result
   }
 
-  tick(): MarketTickResult {
+  tick(priceModifiers?: Record<CropType, number>): MarketTickResult {
     const event = Math.random() < EVENT_CHANCE_PER_TICK ? this.fireRandomEvent() : null
 
     for (const crop of CropManager.getAllCrops()) {
       const ct = crop.type
-      const base = crop.sellPrice
-      const floor = base * PRICE_FLOOR_RATIO
-      const ceil = base * PRICE_CEIL_RATIO
+      // Seasonal modifier shifts the mean-reversion target
+      const seasonalMod = priceModifiers?.[ct] ?? 1
+      const base = crop.sellPrice * seasonalMod
+      const floor = crop.sellPrice * PRICE_FLOOR_RATIO
+      const ceil = crop.sellPrice * PRICE_CEIL_RATIO
       const vol = VOLATILITY[ct]
 
-      // Mean reversion drift
+      // Mean reversion drift toward the seasonally-adjusted base
       const drift = MEAN_REVERSION_STRENGTH * (base - this.prices[ct]) / base
 
       // Random noise (normal approximation via Box-Muller)

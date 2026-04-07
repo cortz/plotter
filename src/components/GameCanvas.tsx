@@ -4,6 +4,8 @@ import { useGameStore } from '../store/gameStore'
 import { CropManager } from '../modules/CropManager'
 import { LandExpansionManager } from '../modules/LandExpansionManager'
 import { marketPriceEngine } from '../modules/MarketPriceEngine'
+import { SEASON_DURATION_MS, SEASONS, SeasonManager } from '../modules/SeasonManager'
+import type { Season } from '../types'
 
 function formatSeconds(ms: number): string {
   const s = Math.ceil(ms / 1000)
@@ -106,20 +108,39 @@ export function GameCanvas() {
 
     scene.startLoop()
 
-    // Crop growth ticker (every 1s)
+    // Crop growth + season ticker (every 1s)
     const cropTicker = setInterval(() => {
-      useGameStore.getState().tickCrops()
+      const state = useGameStore.getState()
+      state.tickCrops()
+
+      // Check if current season has expired
+      const { currentSeason, seasonStartedAt, updateSeason } = state
+      if (Date.now() - seasonStartedAt >= SEASON_DURATION_MS) {
+        const nextSeason = SEASONS[(SEASONS.indexOf(currentSeason) + 1) % SEASONS.length] as Season
+        updateSeason(nextSeason, Date.now())
+        sceneRef.current?.setSeason(nextSeason)
+        sceneRef.current?.buildGrid(
+          useGameStore.getState().grid,
+          useGameStore.getState().plots
+        )
+      }
     }, 1000)
 
     // Market price ticker (every 30s)
     const marketTicker = setInterval(() => {
-      const result = marketPriceEngine.tick()
+      const { currentSeason } = useGameStore.getState()
+      const priceMods = SeasonManager.getPriceModifiers(currentSeason)
+      const result = marketPriceEngine.tick(priceMods)
       useGameStore.getState().updateMarketPrices(result.prices, result.histories, result.event)
     }, 30_000)
 
     // Handle canvas resize
     const resizeObserver = new ResizeObserver(() => scene.resize())
     resizeObserver.observe(canvasRef.current)
+
+    // Apply initial season visuals
+    const initialSeason = useGameStore.getState().currentSeason
+    scene.setSeason(initialSeason)
 
     return () => {
       scene.destroy()

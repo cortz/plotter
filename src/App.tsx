@@ -5,6 +5,8 @@ import { MarketPanel } from './components/MarketPanel'
 import { PlantingMenu } from './components/PlantingMenu'
 import { Tooltip } from './components/Tooltip'
 import { MarketEventToast } from './components/MarketEventToast'
+import { SeasonBadge } from './components/SeasonBadge'
+import { SeasonTransitionToast } from './components/SeasonTransitionToast'
 import { useGameStore } from './store/gameStore'
 
 function App() {
@@ -31,6 +33,19 @@ function App() {
       <PlantingMenu />
       <Tooltip />
       <MarketEventToast />
+      <SeasonTransitionToast />
+
+      {/* Season badge — top center */}
+      <div style={{
+        position: 'absolute',
+        top: 16,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 100,
+        pointerEvents: 'none',
+      }}>
+        <SeasonBadge />
+      </div>
 
       {/* Title watermark */}
       <div style={{

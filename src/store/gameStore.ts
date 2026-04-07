@@ -1,10 +1,11 @@
 import { create } from 'zustand'
-import type { CropType, TileData, PlotState, TooltipData, MarketEvent } from '../types'
+import type { CropType, TileData, PlotState, TooltipData, MarketEvent, Season } from '../types'
 import { CropManager } from '../modules/CropManager'
 import { SaveManager } from '../modules/SaveManager'
 import { recomputeRoads } from '../modules/RoadManager'
 import { LandExpansionManager } from '../modules/LandExpansionManager'
 import { marketPriceEngine } from '../modules/MarketPriceEngine'
+import { getAdjustedGrowDuration } from '../modules/SeasonManager'
 
 const GRID_SIZE = 9
 const STARTING_BALANCE = 200
@@ -33,6 +34,8 @@ export interface GameState {
   marketPrices: Record<CropType, number>
   priceHistories: Record<CropType, number[]>
   lastMarketEvent: MarketEvent | null
+  currentSeason: Season
+  seasonStartedAt: number
 }
 
 export interface GameActions {
@@ -42,6 +45,7 @@ export interface GameActions {
   sellCrop: (cropType: CropType, amount: number) => void
   tickCrops: () => void
   updateMarketPrices: (prices: Record<CropType, number>, histories: Record<CropType, number[]>, event: MarketEvent | null) => void
+  updateSeason: (season: Season, startedAt: number) => void
   setSelectedTile: (pos: { x: number; y: number } | null) => void
   setTooltip: (tooltip: TooltipData | null) => void
   toggleMarket: () => void
@@ -59,6 +63,8 @@ function persist(state: GameState) {
     marketPrices: state.marketPrices,
     priceHistories: state.priceHistories,
     lastMarketEvent: state.lastMarketEvent,
+    currentSeason: state.currentSeason,
+    seasonStartedAt: state.seasonStartedAt,
   })
 }
 
@@ -76,6 +82,8 @@ export const useGameStore = create<Store>((set, get) => ({
   marketPrices: initialPrices,
   priceHistories: initialHistories,
   lastMarketEvent: null,
+  currentSeason: 'spring' as Season,
+  seasonStartedAt: Date.now(),
 
   plantCrop: (x, y, cropType) => {
     const s = get()
@@ -162,7 +170,9 @@ export const useGameStore = create<Store>((set, get) => ({
     for (const [key, plot] of Object.entries(newPlots)) {
       if (plot.status !== 'growing' || !plot.cropType || !plot.plantedAt) continue
       const def = CropManager.getCropDefinition(plot.cropType)
-      if (now - plot.plantedAt >= def.growDuration) {
+      // Adjust grow duration for current season
+      const adjustedDuration = getAdjustedGrowDuration(def.growDuration, plot.cropType, s.currentSeason)
+      if (now - plot.plantedAt >= adjustedDuration) {
         newPlots[key] = { ...plot, status: 'harvestable' }
         changed = true
       }
@@ -187,6 +197,13 @@ export const useGameStore = create<Store>((set, get) => ({
     persist(next)
   },
 
+  updateSeason: (season, startedAt) => {
+    const s = get()
+    const next: GameState = { ...s, currentSeason: season, seasonStartedAt: startedAt }
+    set(next)
+    persist(next)
+  },
+
   setSelectedTile: pos => set({ selectedTile: pos }),
   setTooltip: tooltip => set({ tooltip }),
   toggleMarket: () => set(s => ({ marketOpen: !s.marketOpen })),
@@ -195,7 +212,6 @@ export const useGameStore = create<Store>((set, get) => ({
     const saved = SaveManager.load()
     if (!saved) return
 
-    // Restore market engine state if available
     if (saved.marketPrices && saved.priceHistories) {
       marketPriceEngine.deserialize({ prices: saved.marketPrices, histories: saved.priceHistories })
     }
@@ -208,6 +224,8 @@ export const useGameStore = create<Store>((set, get) => ({
       marketPrices: saved.marketPrices ?? marketPriceEngine.getAllPrices(),
       priceHistories: saved.priceHistories ?? marketPriceEngine.getAllHistories(),
       lastMarketEvent: saved.lastMarketEvent ?? null,
+      currentSeason: saved.currentSeason ?? 'spring',
+      seasonStartedAt: saved.seasonStartedAt ?? Date.now(),
     })
   },
 }))

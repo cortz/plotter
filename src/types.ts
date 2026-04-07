@@ -4,6 +4,26 @@ export type TileType = 'locked' | 'unlocked' | 'road' | 'plot'
 
 export type PlotStatus = 'empty' | 'growing' | 'harvestable'
 
+export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
+
+export interface SeasonConfig {
+  emoji: string
+  label: string
+  description: string
+  /** Grow duration multiplier per crop (< 1 = faster) */
+  growthMod: Record<CropType, number>
+  /** Base sell-price multiplier per crop (shifts market mean reversion target) */
+  priceMod: Record<CropType, number>
+  /** Three.js clear color (sky) */
+  skyColor: number
+  /** Ambient light color */
+  ambientColor: number
+  /** Unlocked tile color */
+  unlockedColor: number
+  /** Road tile color */
+  roadColor: number
+}
+
 export interface CropDefinition {
   type: CropType
   name: string
@@ -46,5 +66,7 @@ export interface PersistedState {
   marketPrices: Record<CropType, number>
   priceHistories: Record<CropType, number[]>
   lastMarketEvent: MarketEvent | null
+  currentSeason: Season
+  seasonStartedAt: number
 }
 

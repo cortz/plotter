@@ -1,14 +1,15 @@
 import * as THREE from 'three'
-import type { TileData, PlotState, CropType } from '../types'
+import type { TileData, PlotState, CropType, Season } from '../types'
 import { CropManager } from '../modules/CropManager'
+import { SEASON_CONFIGS } from '../modules/SeasonManager'
 
 const GRID_SIZE = 9
 const TILE_SIZE = 1
 const TILE_GAP = 0.06
 const DRAG_THRESHOLD = 5
 
-// Colors per tile state
-const COLORS: Record<string, number> = {
+// Dynamic colors — updated by setSeason()
+let COLORS: Record<string, number> = {
   locked: 0x7a7a7a,
   unlocked: 0x4e8c2f,
   road: 0xc8a96e,
@@ -21,6 +22,7 @@ export class SceneManager {
   private renderer: THREE.WebGLRenderer
   private scene: THREE.Scene
   private camera: THREE.OrthographicCamera
+  private ambientLight!: THREE.AmbientLight
   private tileMeshes = new Map<string, THREE.Mesh>()
   private cropMeshes = new Map<string, THREE.Mesh>()
   private raycaster = new THREE.Raycaster()
@@ -67,7 +69,8 @@ export class SceneManager {
     this.positionCamera()
 
     // Lighting
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.75))
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.75)
+    this.scene.add(this.ambientLight)
     const sun = new THREE.DirectionalLight(0xffffff, 0.6)
     sun.position.set(8, 15, 4)
     this.scene.add(sun)
@@ -236,6 +239,14 @@ export class SceneManager {
   }
 
   resize() { this.onResize() }
+
+  setSeason(season: Season) {
+    const config = SEASON_CONFIGS[season]
+    this.renderer.setClearColor(config.skyColor)
+    this.ambientLight.color.setHex(config.ambientColor)
+    COLORS.unlocked = config.unlockedColor
+    COLORS.road = config.roadColor
+  }
 
   destroy() {
     this.stopLoop()
