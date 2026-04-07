@@ -1,6 +1,7 @@
 import { useGameStore } from '../store/gameStore'
 import { CropManager } from '../modules/CropManager'
 import { BARN_BONUS } from '../modules/BuildingManager'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import type { CropType } from '../types'
 
 export function MarketPanel() {
@@ -13,6 +14,8 @@ export function MarketPanel() {
   const lastMarketEvent = useGameStore(s => s.lastMarketEvent)
   const buildings = useGameStore(s => s.buildings)
   const sellCrop = useGameStore(s => s.sellCrop)
+
+  useEscapeKey(toggleMarket)
 
   if (!marketOpen) return null
 

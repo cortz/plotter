@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { BUILDING_DEFS } from '../modules/BuildingManager'
 import { CropManager } from '../modules/CropManager'
 import { getAdjustedGrowDuration, getBestCropsForSeason, SEASON_CONFIGS } from '../modules/SeasonManager'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import type { BuildingType, CropType } from '../types'
 
 type View = 'choose' | 'plant' | 'build'
@@ -39,11 +40,13 @@ export function BuildingMenu() {
   const bestCrops = getBestCropsForSeason(currentSeason)
   const seasonConfig = SEASON_CONFIGS[currentSeason]
 
-  const close = () => {
+  const close = useCallback(() => {
     setBuildingMenuTile(null)
     setSelectedTile(null)
     setView('choose')
-  }
+  }, [setBuildingMenuTile, setSelectedTile])
+
+  useEscapeKey(close)
 
   const handlePlant = (cropType: CropType) => {
     plantCrop(tile.x, tile.y, cropType)

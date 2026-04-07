@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { SEASON_CONFIGS, SEASONS } from '../modules/SeasonManager'
 import { CropManager } from '../modules/CropManager'
 import { BUILDING_DEFS } from '../modules/BuildingManager'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import type { BuildingType } from '../types'
 
 export function HelpButton() {
@@ -9,6 +10,8 @@ export function HelpButton() {
   const [tab, setTab] = useState<'basics' | 'market' | 'seasons' | 'buildings'>('basics')
 
   const crops = CropManager.getAllCrops()
+
+  useEscapeKey(() => setOpen(false))
 
   return (
     <>
