@@ -1,5 +1,6 @@
 import { useGameStore } from '../store/gameStore'
 import { CropManager } from '../modules/CropManager'
+import { HelpButton } from './HelpButton'
 
 export function HUD() {
   const balance = useGameStore(s => s.balance)
@@ -34,25 +35,27 @@ export function HUD() {
         )}
       </div>
 
-      {/* Market button */}
-      <button
-        onClick={toggleMarket}
-        style={{
-          pointerEvents: 'all',
-          background: marketOpen ? '#5a3a1a' : '#8B5E3C',
-          color: '#fff',
-          border: '2px solid #c8903a',
-          borderRadius: 10,
-          padding: '8px 16px',
-          fontSize: 15,
-          fontWeight: 700,
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-        }}
-      >
-        🏪 Market
-      </button>
+      {/* Right-side buttons */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', pointerEvents: 'all' }}>
+        <button
+          onClick={toggleMarket}
+          style={{
+            background: marketOpen ? '#5a3a1a' : '#8B5E3C',
+            color: '#fff',
+            border: '2px solid #c8903a',
+            borderRadius: 10,
+            padding: '8px 16px',
+            fontSize: 15,
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          }}
+        >
+          🏪 Market
+        </button>
+        <HelpButton />
+      </div>
     </div>
   )
 }
