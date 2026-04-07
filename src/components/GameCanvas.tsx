@@ -48,7 +48,7 @@ export function GameCanvas() {
         buyLand(x, y)
       } else if (tile.type === 'building' && building) {
         // No action on buildings for now — tooltip shows info
-      } else if (tile.type === 'unlocked' || tile.type === 'road' ||
+      } else if (tile.type === 'unlocked' ||
                  (tile.type === 'plot' && (!plot || plot.status === 'empty'))) {
         setBuildingMenuTile({ x, y })
       }
@@ -82,8 +82,6 @@ export function GameCanvas() {
         } else {
           content = '🔒 Locked Land\n(not adjacent to your farm)'
         }
-      } else if (tile.type === 'road') {
-        content = '🛤️ Road'
       } else if (tile.type === 'building') {
         const b = state.buildings[key]
         if (b) {

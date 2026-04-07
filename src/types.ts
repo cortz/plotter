@@ -1,6 +1,6 @@
 export type CropType = 'wheat' | 'corn' | 'pumpkin'
 
-export type TileType = 'locked' | 'unlocked' | 'road' | 'plot' | 'building'
+export type TileType = 'locked' | 'unlocked' | 'plot' | 'building'
 
 export type BuildingType = 'barn' | 'greenhouse' | 'windmill'
 
@@ -36,8 +36,6 @@ export interface SeasonConfig {
   ambientColor: number
   /** Unlocked tile color */
   unlockedColor: number
-  /** Road tile color */
-  roadColor: number
 }
 
 export interface CropDefinition {

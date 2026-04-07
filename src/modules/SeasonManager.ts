@@ -14,7 +14,6 @@ export const SEASON_CONFIGS: Record<Season, SeasonConfig> = {
     skyColor:       0x2a4a1a,
     ambientColor:   0xfff5e0,
     unlockedColor:  0x5aad3a,
-    roadColor:      0xc8a96e,
   },
   summer: {
     emoji: '☀️',
@@ -25,7 +24,6 @@ export const SEASON_CONFIGS: Record<Season, SeasonConfig> = {
     skyColor:       0x1a3a14,
     ambientColor:   0xfffbe8,
     unlockedColor:  0x3a8c2f,
-    roadColor:      0xb89860,
   },
   autumn: {
     emoji: '🍂',
@@ -36,7 +34,6 @@ export const SEASON_CONFIGS: Record<Season, SeasonConfig> = {
     skyColor:       0x2a1e0a,
     ambientColor:   0xffddaa,
     unlockedColor:  0x7a5a20,
-    roadColor:      0xa07848,
   },
   winter: {
     emoji: '❄️',
@@ -47,7 +44,6 @@ export const SEASON_CONFIGS: Record<Season, SeasonConfig> = {
     skyColor:       0x0e1520,
     ambientColor:   0xd0e8ff,
     unlockedColor:  0x7090a8,
-    roadColor:      0x9898b0,
   },
 }
 

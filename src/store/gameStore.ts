@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import type { CropType, TileData, PlotState, TooltipData, MarketEvent, Season, BuildingData } from '../types'
 import { CropManager } from '../modules/CropManager'
 import { SaveManager } from '../modules/SaveManager'
-import { recomputeRoads } from '../modules/RoadManager'
 import { LandExpansionManager } from '../modules/LandExpansionManager'
 import { marketPriceEngine } from '../modules/MarketPriceEngine'
 import { getAdjustedGrowDuration, SEASON_CONFIGS } from '../modules/SeasonManager'
@@ -98,14 +97,14 @@ export const useGameStore = create<Store>((set, get) => ({
     const tile = s.grid[y][x]
     const key = `${x},${y}`
     const isEmptyPlot = tile.type === 'plot' && (!s.plots[key] || s.plots[key].status === 'empty')
-    if (tile.type !== 'unlocked' && tile.type !== 'road' && !isEmptyPlot) return
+    if (tile.type !== 'unlocked' && !isEmptyPlot) return
 
     const cropDef = CropManager.getCropDefinition(cropType)
     if (s.balance < cropDef.seedCost) return
 
     const newGrid = s.grid.map(row => row.map(t => ({ ...t })))
     newGrid[y][x] = { x, y, type: 'plot' }
-    const gridWithRoads = recomputeRoads(newGrid)
+    const gridWithRoads = newGrid
 
     const newPlots: Record<string, PlotState> = {
       ...s.plots,
@@ -148,7 +147,7 @@ export const useGameStore = create<Store>((set, get) => ({
 
     const newGrid = s.grid.map(row => row.map(t => ({ ...t })))
     newGrid[y][x] = { x, y, type: 'unlocked' }
-    const gridWithRoads = recomputeRoads(newGrid)
+    const gridWithRoads = newGrid
 
     const next: GameState = { ...s, grid: gridWithRoads, balance: s.balance - cost, selectedTile: null }
     set(next)
@@ -184,7 +183,7 @@ export const useGameStore = create<Store>((set, get) => ({
 
     const newGrid = s.grid.map(row => row.map(t => ({ ...t })))
     newGrid[y][x] = { x, y, type: 'building' }
-    const gridWithRoads = recomputeRoads(newGrid)
+    const gridWithRoads = newGrid
 
     // Clean up any leftover plot state
     const newPlots = { ...s.plots }
@@ -269,8 +268,13 @@ export const useGameStore = create<Store>((set, get) => ({
       marketPriceEngine.deserialize({ prices: saved.marketPrices, histories: saved.priceHistories })
     }
 
+    // Migrate old saves: convert any 'road' tiles to 'unlocked'
+    const grid = (saved.grid ?? createInitialGrid()).map(row =>
+      row.map(t => (t.type as string) === 'road' ? { ...t, type: 'unlocked' as const } : t)
+    )
+
     set({
-      grid: saved.grid ?? createInitialGrid(),
+      grid,
       plots: saved.plots ?? {},
       buildings: saved.buildings ?? {},
       balance: saved.balance ?? STARTING_BALANCE,

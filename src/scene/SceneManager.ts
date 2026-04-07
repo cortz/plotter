@@ -13,7 +13,6 @@ const DRAG_THRESHOLD = 5
 let COLORS: Record<string, number> = {
   locked: 0x7a7a7a,
   unlocked: 0x4e8c2f,
-  road: 0xc8a96e,
   plot_empty: 0x8b5e3c,
   plot_growing: 0x8fbe45,
   plot_harvestable: 0xffd700,
@@ -276,7 +275,6 @@ export class SceneManager {
     this.renderer.setClearColor(config.skyColor)
     this.ambientLight.color.setHex(config.ambientColor)
     COLORS.unlocked = config.unlockedColor
-    COLORS.road = config.roadColor
   }
 
   destroy() {
