@@ -3,6 +3,7 @@ import { SceneManager } from '../scene/SceneManager'
 import { useGameStore } from '../store/gameStore'
 import { CropManager } from '../modules/CropManager'
 import { LandExpansionManager } from '../modules/LandExpansionManager'
+import { marketPriceEngine } from '../modules/MarketPriceEngine'
 
 function formatSeconds(ms: number): string {
   const s = Math.ceil(ms / 1000)
@@ -105,10 +106,16 @@ export function GameCanvas() {
 
     scene.startLoop()
 
-    // Crop growth ticker
-    const ticker = setInterval(() => {
+    // Crop growth ticker (every 1s)
+    const cropTicker = setInterval(() => {
       useGameStore.getState().tickCrops()
     }, 1000)
+
+    // Market price ticker (every 30s)
+    const marketTicker = setInterval(() => {
+      const result = marketPriceEngine.tick()
+      useGameStore.getState().updateMarketPrices(result.prices, result.histories, result.event)
+    }, 30_000)
 
     // Handle canvas resize
     const resizeObserver = new ResizeObserver(() => scene.resize())
@@ -116,7 +123,8 @@ export function GameCanvas() {
 
     return () => {
       scene.destroy()
-      clearInterval(ticker)
+      clearInterval(cropTicker)
+      clearInterval(marketTicker)
       resizeObserver.disconnect()
     }
   }, [])

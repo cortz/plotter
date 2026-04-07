@@ -4,6 +4,7 @@ import { HUD } from './components/HUD'
 import { MarketPanel } from './components/MarketPanel'
 import { PlantingMenu } from './components/PlantingMenu'
 import { Tooltip } from './components/Tooltip'
+import { MarketEventToast } from './components/MarketEventToast'
 import { useGameStore } from './store/gameStore'
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
       <MarketPanel />
       <PlantingMenu />
       <Tooltip />
+      <MarketEventToast />
 
       {/* Title watermark */}
       <div style={{

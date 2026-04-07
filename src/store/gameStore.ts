@@ -1,9 +1,10 @@
 import { create } from 'zustand'
-import type { CropType, TileData, PlotState, TooltipData } from '../types'
+import type { CropType, TileData, PlotState, TooltipData, MarketEvent } from '../types'
 import { CropManager } from '../modules/CropManager'
 import { SaveManager } from '../modules/SaveManager'
 import { recomputeRoads } from '../modules/RoadManager'
 import { LandExpansionManager } from '../modules/LandExpansionManager'
+import { marketPriceEngine } from '../modules/MarketPriceEngine'
 
 const GRID_SIZE = 9
 const STARTING_BALANCE = 200
@@ -29,6 +30,9 @@ export interface GameState {
   selectedTile: { x: number; y: number } | null
   marketOpen: boolean
   tooltip: TooltipData | null
+  marketPrices: Record<CropType, number>
+  priceHistories: Record<CropType, number[]>
+  lastMarketEvent: MarketEvent | null
 }
 
 export interface GameActions {
@@ -37,6 +41,7 @@ export interface GameActions {
   buyLand: (x: number, y: number) => void
   sellCrop: (cropType: CropType, amount: number) => void
   tickCrops: () => void
+  updateMarketPrices: (prices: Record<CropType, number>, histories: Record<CropType, number[]>, event: MarketEvent | null) => void
   setSelectedTile: (pos: { x: number; y: number } | null) => void
   setTooltip: (tooltip: TooltipData | null) => void
   toggleMarket: () => void
@@ -51,8 +56,14 @@ function persist(state: GameState) {
     plots: state.plots,
     balance: state.balance,
     inventory: state.inventory,
+    marketPrices: state.marketPrices,
+    priceHistories: state.priceHistories,
+    lastMarketEvent: state.lastMarketEvent,
   })
 }
+
+const initialPrices = marketPriceEngine.getAllPrices()
+const initialHistories = marketPriceEngine.getAllHistories()
 
 export const useGameStore = create<Store>((set, get) => ({
   grid: createInitialGrid(),
@@ -62,6 +73,9 @@ export const useGameStore = create<Store>((set, get) => ({
   selectedTile: null,
   marketOpen: false,
   tooltip: null,
+  marketPrices: initialPrices,
+  priceHistories: initialHistories,
+  lastMarketEvent: null,
 
   plantCrop: (x, y, cropType) => {
     const s = get()
@@ -73,7 +87,6 @@ export const useGameStore = create<Store>((set, get) => ({
     const cropDef = CropManager.getCropDefinition(cropType)
     if (s.balance < cropDef.seedCost) return
 
-    // Convert tile to plot
     const newGrid = s.grid.map(row => row.map(t => ({ ...t })))
     newGrid[y][x] = { x, y, type: 'plot' }
     const gridWithRoads = recomputeRoads(newGrid)
@@ -132,9 +145,10 @@ export const useGameStore = create<Store>((set, get) => ({
     const toSell = Math.min(amount, have)
     if (toSell <= 0) return
 
-    const cropDef = CropManager.getCropDefinition(cropType)
+    // Use the live market price instead of the static base price
+    const livePrice = s.marketPrices[cropType] ?? CropManager.getCropDefinition(cropType).sellPrice
     const newInventory = { ...s.inventory, [cropType]: have - toSell }
-    const next: GameState = { ...s, inventory: newInventory, balance: s.balance + toSell * cropDef.sellPrice }
+    const next: GameState = { ...s, inventory: newInventory, balance: s.balance + toSell * livePrice }
     set(next)
     persist(next)
   },
@@ -161,6 +175,18 @@ export const useGameStore = create<Store>((set, get) => ({
     }
   },
 
+  updateMarketPrices: (prices, histories, event) => {
+    const s = get()
+    const next: GameState = {
+      ...s,
+      marketPrices: prices,
+      priceHistories: histories,
+      lastMarketEvent: event ?? s.lastMarketEvent,
+    }
+    set(next)
+    persist(next)
+  },
+
   setSelectedTile: pos => set({ selectedTile: pos }),
   setTooltip: tooltip => set({ tooltip }),
   toggleMarket: () => set(s => ({ marketOpen: !s.marketOpen })),
@@ -168,11 +194,20 @@ export const useGameStore = create<Store>((set, get) => ({
   loadGame: () => {
     const saved = SaveManager.load()
     if (!saved) return
+
+    // Restore market engine state if available
+    if (saved.marketPrices && saved.priceHistories) {
+      marketPriceEngine.deserialize({ prices: saved.marketPrices, histories: saved.priceHistories })
+    }
+
     set({
       grid: saved.grid ?? createInitialGrid(),
       plots: saved.plots ?? {},
       balance: saved.balance ?? STARTING_BALANCE,
       inventory: saved.inventory ?? createInitialInventory(),
+      marketPrices: saved.marketPrices ?? marketPriceEngine.getAllPrices(),
+      priceHistories: saved.priceHistories ?? marketPriceEngine.getAllHistories(),
+      lastMarketEvent: saved.lastMarketEvent ?? null,
     })
   },
 }))

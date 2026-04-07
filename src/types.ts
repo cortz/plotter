@@ -10,7 +10,7 @@ export interface CropDefinition {
   emoji: string
   growDuration: number // ms
   seedCost: number
-  sellPrice: number
+  sellPrice: number // base / reference price
   color: number // Three.js hex
 }
 
@@ -30,9 +30,21 @@ export interface TooltipData {
   content: string
 }
 
+export interface MarketEvent {
+  name: string
+  description: string
+  cropType: CropType
+  multiplier: number // e.g. 1.45 = +45%, 0.65 = -35%
+  firedAt: number // Date.now()
+}
+
 export interface PersistedState {
   grid: TileData[][]
   plots: Record<string, PlotState>
   balance: number
   inventory: Record<CropType, number>
+  marketPrices: Record<CropType, number>
+  priceHistories: Record<CropType, number[]>
+  lastMarketEvent: MarketEvent | null
 }
+
