@@ -1,5 +1,6 @@
 import { useGameStore } from '../store/gameStore'
 import { CropManager } from '../modules/CropManager'
+import { BARN_BONUS } from '../modules/BuildingManager'
 import type { CropType } from '../types'
 
 export function MarketPanel() {
@@ -10,10 +11,12 @@ export function MarketPanel() {
   const marketPrices = useGameStore(s => s.marketPrices)
   const priceHistories = useGameStore(s => s.priceHistories)
   const lastMarketEvent = useGameStore(s => s.lastMarketEvent)
+  const buildings = useGameStore(s => s.buildings)
   const sellCrop = useGameStore(s => s.sellCrop)
 
   if (!marketOpen) return null
 
+  const hasBarn = Object.values(buildings).some(b => b.type === 'barn')
   const crops = CropManager.getAllCrops()
 
   return (
@@ -92,7 +95,8 @@ export function MarketPanel() {
           const trending = price >= prev
           const allHigh = Math.max(...history)
           const allLow = Math.min(...history)
-          const revenue = count * price
+          const effectivePrice = hasBarn ? Math.round(price * BARN_BONUS) : price
+          const revenue = count * effectivePrice
 
           return (
             <div key={ct} style={{
@@ -134,10 +138,13 @@ export function MarketPanel() {
               }}>
                 <span>▲ High: <span style={{ color: '#aaa' }}>{Math.round(allHigh)}</span></span>
                 <span>▼ Low: <span style={{ color: '#aaa' }}>{Math.round(allLow)}</span></span>
-                <span>Barn: <span style={{ color: count > 0 ? '#ffd700' : '#666' }}>{count}</span></span>
+                <span>In Barn: <span style={{ color: count > 0 ? '#ffd700' : '#666' }}>{count}</span></span>
               </div>
-
-              {/* Sell buttons */}
+              {hasBarn && (
+                <div style={{ fontSize: 11, color: '#9dcc7d', marginBottom: 6 }}>
+                  🌾 Barn bonus: {price} → {effectivePrice} 💰 (+{Math.round((BARN_BONUS - 1) * 100)}%)
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8 }}>
                 <ActionButton
                   label="Sell 1"

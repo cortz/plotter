@@ -5,6 +5,7 @@ import { CropManager } from '../modules/CropManager'
 import { LandExpansionManager } from '../modules/LandExpansionManager'
 import { marketPriceEngine } from '../modules/MarketPriceEngine'
 import { SEASON_DURATION_MS, SEASONS, SeasonManager } from '../modules/SeasonManager'
+import { BUILDING_DEFS } from '../modules/BuildingManager'
 import type { Season } from '../types'
 
 function formatSeconds(ms: number): string {
@@ -22,7 +23,8 @@ export function GameCanvas() {
 
   const grid = useGameStore(s => s.grid)
   const plots = useGameStore(s => s.plots)
-  const setSelectedTile = useGameStore(s => s.setSelectedTile)
+  const buildings = useGameStore(s => s.buildings)
+  const setBuildingMenuTile = useGameStore(s => s.setBuildingMenuTile)
   const setTooltip = useGameStore(s => s.setTooltip)
   const harvestPlot = useGameStore(s => s.harvestPlot)
   const buyLand = useGameStore(s => s.buyLand)
@@ -38,14 +40,17 @@ export function GameCanvas() {
       const tile = state.grid[y][x]
       const key = `${x},${y}`
       const plot = state.plots[key]
+      const building = state.buildings[key]
 
       if (tile.type === 'plot' && plot?.status === 'harvestable') {
         harvestPlot(x, y)
       } else if (tile.type === 'locked') {
         buyLand(x, y)
+      } else if (tile.type === 'building' && building) {
+        // No action on buildings for now — tooltip shows info
       } else if (tile.type === 'unlocked' || tile.type === 'road' ||
                  (tile.type === 'plot' && (!plot || plot.status === 'empty'))) {
-        setSelectedTile({ x, y })
+        setBuildingMenuTile({ x, y })
       }
     }
 
@@ -79,8 +84,14 @@ export function GameCanvas() {
         }
       } else if (tile.type === 'road') {
         content = '🛤️ Road'
+      } else if (tile.type === 'building') {
+        const b = state.buildings[key]
+        if (b) {
+          const def = BUILDING_DEFS[b.type]
+          content = `${def.emoji} ${def.name}\n${def.description}`
+        }
       } else if (tile.type === 'unlocked') {
-        content = '🌿 Empty Land\nClick to plant a crop'
+        content = '🌿 Empty Land\nClick to plant or build'
       } else if (tile.type === 'plot') {
         if (!plot || plot.status === 'empty') {
           content = '🪵 Empty Plot\nClick to plant a crop'
@@ -93,7 +104,6 @@ export function GameCanvas() {
           content = `${def.emoji} ${def.name} — Ready!\nClick to harvest ✨`
         }
       }
-
       setTooltip(content ? { content } : null)
     }
 
@@ -121,7 +131,8 @@ export function GameCanvas() {
         sceneRef.current?.setSeason(nextSeason)
         sceneRef.current?.buildGrid(
           useGameStore.getState().grid,
-          useGameStore.getState().plots
+          useGameStore.getState().plots,
+          useGameStore.getState().buildings
         )
       }
     }, 1000)
@@ -150,12 +161,12 @@ export function GameCanvas() {
     }
   }, [])
 
-  // Rebuild scene whenever grid or plot states change
+  // Rebuild scene whenever grid, plots, or buildings change
   useEffect(() => {
     if (sceneRef.current) {
-      sceneRef.current.buildGrid(grid, plots)
+      sceneRef.current.buildGrid(grid, plots, buildings)
     }
-  }, [grid, plots])
+  }, [grid, plots, buildings])
 
   return (
     <canvas

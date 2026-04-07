@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { SEASON_CONFIGS, SEASONS } from '../modules/SeasonManager'
 import { CropManager } from '../modules/CropManager'
+import { BUILDING_DEFS } from '../modules/BuildingManager'
+import type { BuildingType } from '../types'
 
 export function HelpButton() {
   const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<'basics' | 'market' | 'seasons'>('basics')
+  const [tab, setTab] = useState<'basics' | 'market' | 'seasons' | 'buildings'>('basics')
 
   const crops = CropManager.getAllCrops()
 
@@ -65,26 +67,27 @@ export function HelpButton() {
             </div>
 
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 22 }}>
-              {(['basics', 'market', 'seasons'] as const).map(t => (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 22, flexWrap: 'wrap' }}>
+              {(['basics', 'market', 'seasons', 'buildings'] as const).map(t => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
                   style={{
                     flex: 1,
+                    minWidth: 80,
                     padding: '7px 0',
                     borderRadius: 8,
                     border: tab === t ? '2px solid rgba(200,160,60,0.8)' : '2px solid rgba(200,160,60,0.2)',
                     background: tab === t ? 'rgba(200,160,60,0.18)' : 'transparent',
                     color: tab === t ? '#ffd700' : '#a89070',
                     fontWeight: 700,
-                    fontSize: 13,
+                    fontSize: 12,
                     cursor: 'pointer',
                     fontFamily: 'inherit',
                     textTransform: 'capitalize',
                   }}
                 >
-                  {t === 'basics' ? '🌱 Basics' : t === 'market' ? '📈 Market' : '🌸 Seasons'}
+                  {t === 'basics' ? '🌱 Basics' : t === 'market' ? '📈 Market' : t === 'seasons' ? '🌸 Seasons' : '🏗️ Buildings'}
                 </button>
               ))}
             </div>
@@ -202,6 +205,42 @@ export function HelpButton() {
                 </div>
                 <div style={{ background: 'rgba(200,160,60,0.1)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#c8a96e' }}>
                   💡 <strong>Strategy:</strong> The planting menu shows adjusted grow times and highlights the best crop for the current season with a 🌟 badge.
+                </div>
+              </div>
+            )}
+
+            {/* Buildings tab */}
+            {tab === 'buildings' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <Section title="🏗️ What are Buildings?">
+                  Buildings are permanent structures you place on empty land tiles. Each one provides a passive bonus that helps your farm grow or earn more. You can't plant crops on a building tile, so choose placement wisely!
+                </Section>
+                <Section title="🔨 How to Build">
+                  Click any empty green land tile. A menu will appear — choose <strong>Construct</strong> to see available buildings. Confirm the purchase and the building will appear immediately.
+                </Section>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(Object.values(BUILDING_DEFS) as typeof BUILDING_DEFS[BuildingType][]).map(def => (
+                    <div key={def.type} style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(200,160,60,0.2)',
+                      borderRadius: 10,
+                      padding: '12px 14px',
+                      display: 'flex',
+                      gap: 12,
+                      alignItems: 'flex-start',
+                    }}>
+                      <span style={{ fontSize: 26, lineHeight: 1, marginTop: 2 }}>{def.emoji}</span>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                          {def.name} <span style={{ color: '#ffd700', fontWeight: 400, fontSize: 12 }}>— {def.cost} 💰</span>
+                        </div>
+                        <div style={{ fontSize: 13, color: '#c0b090', lineHeight: 1.6 }}>{def.description}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ background: 'rgba(200,160,60,0.1)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#c8a96e' }}>
+                  💡 <strong>Strategy:</strong> A Windmill benefits every plot on the farm, so it's great early on. Once you have many crops, a Barn maximises your sell income. A Greenhouse shines in Winter when penalties are harshest.
                 </div>
               </div>
             )}

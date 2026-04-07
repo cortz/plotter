@@ -1,10 +1,26 @@
 export type CropType = 'wheat' | 'corn' | 'pumpkin'
 
-export type TileType = 'locked' | 'unlocked' | 'road' | 'plot'
+export type TileType = 'locked' | 'unlocked' | 'road' | 'plot' | 'building'
+
+export type BuildingType = 'barn' | 'greenhouse' | 'windmill'
 
 export type PlotStatus = 'empty' | 'growing' | 'harvestable'
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
+
+export interface BuildingData {
+  type: BuildingType
+  placedAt: number // Date.now()
+}
+
+export interface BuildingDefinition {
+  type: BuildingType
+  name: string
+  emoji: string
+  description: string
+  cost: number
+  color: number // Three.js hex for the mesh
+}
 
 export interface SeasonConfig {
   emoji: string
@@ -61,6 +77,7 @@ export interface MarketEvent {
 export interface PersistedState {
   grid: TileData[][]
   plots: Record<string, PlotState>
+  buildings: Record<string, BuildingData>
   balance: number
   inventory: Record<CropType, number>
   marketPrices: Record<CropType, number>

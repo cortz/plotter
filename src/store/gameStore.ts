@@ -1,11 +1,12 @@
 import { create } from 'zustand'
-import type { CropType, TileData, PlotState, TooltipData, MarketEvent, Season } from '../types'
+import type { CropType, TileData, PlotState, TooltipData, MarketEvent, Season, BuildingData } from '../types'
 import { CropManager } from '../modules/CropManager'
 import { SaveManager } from '../modules/SaveManager'
 import { recomputeRoads } from '../modules/RoadManager'
 import { LandExpansionManager } from '../modules/LandExpansionManager'
 import { marketPriceEngine } from '../modules/MarketPriceEngine'
-import { getAdjustedGrowDuration } from '../modules/SeasonManager'
+import { getAdjustedGrowDuration, SEASON_CONFIGS } from '../modules/SeasonManager'
+import { BUILDING_DEFS, BARN_BONUS, getEffectiveGrowDuration } from '../modules/BuildingManager'
 
 const GRID_SIZE = 9
 const STARTING_BALANCE = 200
@@ -26,9 +27,11 @@ function createInitialInventory(): Record<CropType, number> {
 export interface GameState {
   grid: TileData[][]
   plots: Record<string, PlotState>
+  buildings: Record<string, BuildingData>
   balance: number
   inventory: Record<CropType, number>
   selectedTile: { x: number; y: number } | null
+  buildingMenuTile: { x: number; y: number } | null
   marketOpen: boolean
   tooltip: TooltipData | null
   marketPrices: Record<CropType, number>
@@ -43,10 +46,12 @@ export interface GameActions {
   harvestPlot: (x: number, y: number) => void
   buyLand: (x: number, y: number) => void
   sellCrop: (cropType: CropType, amount: number) => void
+  placeBuilding: (x: number, y: number, type: import('../types').BuildingType) => void
   tickCrops: () => void
   updateMarketPrices: (prices: Record<CropType, number>, histories: Record<CropType, number[]>, event: MarketEvent | null) => void
   updateSeason: (season: Season, startedAt: number) => void
   setSelectedTile: (pos: { x: number; y: number } | null) => void
+  setBuildingMenuTile: (pos: { x: number; y: number } | null) => void
   setTooltip: (tooltip: TooltipData | null) => void
   toggleMarket: () => void
   loadGame: () => void
@@ -58,6 +63,7 @@ function persist(state: GameState) {
   SaveManager.save({
     grid: state.grid,
     plots: state.plots,
+    buildings: state.buildings,
     balance: state.balance,
     inventory: state.inventory,
     marketPrices: state.marketPrices,
@@ -74,9 +80,11 @@ const initialHistories = marketPriceEngine.getAllHistories()
 export const useGameStore = create<Store>((set, get) => ({
   grid: createInitialGrid(),
   plots: {},
+  buildings: {},
   balance: STARTING_BALANCE,
   inventory: createInitialInventory(),
   selectedTile: null,
+  buildingMenuTile: null,
   marketOpen: false,
   tooltip: null,
   marketPrices: initialPrices,
@@ -153,10 +161,41 @@ export const useGameStore = create<Store>((set, get) => ({
     const toSell = Math.min(amount, have)
     if (toSell <= 0) return
 
-    // Use the live market price instead of the static base price
     const livePrice = s.marketPrices[cropType] ?? CropManager.getCropDefinition(cropType).sellPrice
+    // Find the selected tile position for barn bonus — use selectedTile if set, otherwise check all plots
+    // For market sells we apply barn bonus if ANY barn is on the farm (simplest UX)
+    const barnBonus = Object.values(s.buildings).some(b => b.type === 'barn') ? BARN_BONUS : 1
+    const effectivePrice = Math.round(livePrice * barnBonus)
     const newInventory = { ...s.inventory, [cropType]: have - toSell }
-    const next: GameState = { ...s, inventory: newInventory, balance: s.balance + toSell * livePrice }
+    const next: GameState = { ...s, inventory: newInventory, balance: s.balance + toSell * effectivePrice }
+    set(next)
+    persist(next)
+  },
+
+  placeBuilding: (x, y, type) => {
+    const s = get()
+    const tile = s.grid[y][x]
+    if (tile.type !== 'unlocked') return
+    const def = BUILDING_DEFS[type]
+    if (s.balance < def.cost) return
+
+    const key = `${x},${y}`
+    const newGrid = s.grid.map(row => row.map(t => ({ ...t })))
+    newGrid[y][x] = { x, y, type: 'building' }
+    const gridWithRoads = recomputeRoads(newGrid)
+
+    const newBuildings: Record<string, BuildingData> = {
+      ...s.buildings,
+      [key]: { type, placedAt: Date.now() },
+    }
+
+    const next: GameState = {
+      ...s,
+      grid: gridWithRoads,
+      buildings: newBuildings,
+      balance: s.balance - def.cost,
+      buildingMenuTile: null,
+    }
     set(next)
     persist(next)
   },
@@ -169,10 +208,16 @@ export const useGameStore = create<Store>((set, get) => ({
 
     for (const [key, plot] of Object.entries(newPlots)) {
       if (plot.status !== 'growing' || !plot.cropType || !plot.plantedAt) continue
+      const [x, y] = key.split(',').map(Number)
       const def = CropManager.getCropDefinition(plot.cropType)
-      // Adjust grow duration for current season
-      const adjustedDuration = getAdjustedGrowDuration(def.growDuration, plot.cropType, s.currentSeason)
-      if (now - plot.plantedAt >= adjustedDuration) {
+      const seasonMod = SEASON_CONFIGS[s.currentSeason].growthMod[plot.cropType]
+      const seasonAdjusted = getAdjustedGrowDuration(def.growDuration, plot.cropType, s.currentSeason)
+      const effectiveDuration = getEffectiveGrowDuration(
+        seasonAdjusted, plot.cropType, x, y,
+        s.buildings as Record<string, { type: import('../types').BuildingType }>,
+        seasonMod, def.growDuration
+      )
+      if (now - plot.plantedAt >= effectiveDuration) {
         newPlots[key] = { ...plot, status: 'harvestable' }
         changed = true
       }
@@ -205,6 +250,7 @@ export const useGameStore = create<Store>((set, get) => ({
   },
 
   setSelectedTile: pos => set({ selectedTile: pos }),
+  setBuildingMenuTile: pos => set({ buildingMenuTile: pos }),
   setTooltip: tooltip => set({ tooltip }),
   toggleMarket: () => set(s => ({ marketOpen: !s.marketOpen })),
 
@@ -219,6 +265,7 @@ export const useGameStore = create<Store>((set, get) => ({
     set({
       grid: saved.grid ?? createInitialGrid(),
       plots: saved.plots ?? {},
+      buildings: saved.buildings ?? {},
       balance: saved.balance ?? STARTING_BALANCE,
       inventory: saved.inventory ?? createInitialInventory(),
       marketPrices: saved.marketPrices ?? marketPriceEngine.getAllPrices(),

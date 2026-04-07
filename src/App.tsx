@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { GameCanvas } from './components/GameCanvas'
 import { HUD } from './components/HUD'
 import { MarketPanel } from './components/MarketPanel'
-import { PlantingMenu } from './components/PlantingMenu'
+import { BuildingMenu } from './components/BuildingMenu'
 import { Tooltip } from './components/Tooltip'
 import { MarketEventToast } from './components/MarketEventToast'
 import { SeasonBadge } from './components/SeasonBadge'
@@ -30,7 +30,7 @@ function App() {
       {/* React UI overlays */}
       <HUD />
       <MarketPanel />
-      <PlantingMenu />
+      <BuildingMenu />
       <Tooltip />
       <MarketEventToast />
       <SeasonTransitionToast />

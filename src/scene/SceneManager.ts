@@ -1,7 +1,8 @@
 import * as THREE from 'three'
-import type { TileData, PlotState, CropType, Season } from '../types'
+import type { TileData, PlotState, CropType, Season, BuildingData } from '../types'
 import { CropManager } from '../modules/CropManager'
 import { SEASON_CONFIGS } from '../modules/SeasonManager'
+import { BUILDING_DEFS } from '../modules/BuildingManager'
 
 const GRID_SIZE = 9
 const TILE_SIZE = 1
@@ -159,7 +160,7 @@ export class SceneManager {
     this.renderer.setSize(w, h, false)
   }
 
-  buildGrid(grid: TileData[][], plots: Record<string, PlotState | undefined>) {
+  buildGrid(grid: TileData[][], plots: Record<string, PlotState | undefined>, buildings: Record<string, BuildingData> = {}) {
     this.tileMeshes.forEach(m => { this.scene.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose() })
     this.cropMeshes.forEach(m => { this.scene.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose() })
     this.tileMeshes.clear()
@@ -167,12 +168,13 @@ export class SceneManager {
 
     for (let y = 0; y < GRID_SIZE; y++) {
       for (let x = 0; x < GRID_SIZE; x++) {
-        this.addTileMesh(grid[y][x], plots[`${x},${y}`])
+        const key = `${x},${y}`
+        this.addTileMesh(grid[y][x], plots[key], buildings[key])
       }
     }
   }
 
-  private addTileMesh(tile: TileData, plot?: PlotState) {
+  private addTileMesh(tile: TileData, plot?: PlotState, building?: BuildingData) {
     const key = `${tile.x},${tile.y}`
     const wx = tile.x * (TILE_SIZE + TILE_GAP)
     const wz = tile.y * (TILE_SIZE + TILE_GAP)
@@ -194,6 +196,35 @@ export class SceneManager {
     if (tile.type === 'plot' && plot?.cropType && plot.status !== 'empty') {
       this.addCropMesh(key, plot.cropType, plot.status, wx, wz, tileH)
     }
+
+    // Building visual
+    if (tile.type === 'building' && building) {
+      this.addBuildingMesh(key, building, wx, wz, tileH)
+    }
+  }
+
+  private addBuildingMesh(key: string, building: BuildingData, wx: number, wz: number, tileH: number) {
+    const def = BUILDING_DEFS[building.type]
+    // Base platform
+    const baseGeo = new THREE.BoxGeometry(TILE_SIZE * 0.88, 0.32, TILE_SIZE * 0.88)
+    const baseMat = new THREE.MeshLambertMaterial({ color: def.color })
+    const base = new THREE.Mesh(baseGeo, baseMat)
+    base.position.set(wx, tileH + 0.16, wz)
+    base.userData.key = key
+    this.scene.add(base)
+    this.tileMeshes.set(`${key}_bbase`, base)
+
+    // Tower body (animates gently)
+    const bodyGeo = new THREE.BoxGeometry(TILE_SIZE * 0.48, 0.52, TILE_SIZE * 0.48)
+    const bodyMat = new THREE.MeshLambertMaterial({ color: def.color })
+    const body = new THREE.Mesh(bodyGeo, bodyMat)
+    const bodyY = tileH + 0.32 + 0.26
+    body.position.set(wx, bodyY, wz)
+    body.userData.key = key
+    body.userData.baseY = bodyY
+    body.userData.isBuilding = true
+    this.scene.add(body)
+    this.cropMeshes.set(key, body)
   }
 
   private addCropMesh(key: string, cropType: CropType, status: PlotState['status'], wx: number, wz: number, tileH: number) {
