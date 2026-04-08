@@ -20,6 +20,7 @@ export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<SceneManager | null>(null)
   const prevHoverKey = useRef<string | null>(null)
+  const hoverCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const grid = useGameStore(s => s.grid)
   const plots = useGameStore(s => s.plots)
@@ -35,6 +36,32 @@ export function GameCanvas() {
     if (!canvasRef.current) return
     const scene = new SceneManager(canvasRef.current)
     sceneRef.current = scene
+
+    const clearHoverCountdown = () => {
+      if (hoverCountdownRef.current !== null) {
+        clearInterval(hoverCountdownRef.current)
+        hoverCountdownRef.current = null
+      }
+    }
+
+    const startHoverCountdown = (x: number, y: number) => {
+      clearHoverCountdown()
+      hoverCountdownRef.current = setInterval(() => {
+        const state = useGameStore.getState()
+        const plot = state.plots[`${x},${y}`]
+        if (!plot || plot.status !== 'growing' || !plot.cropType || !plot.harvestableAt) {
+          clearHoverCountdown()
+          return
+        }
+        const def = CropManager.getCropDefinition(plot.cropType)
+        const remaining = Math.max(0, plot.harvestableAt - Date.now())
+        const content = remaining > 0
+          ? `${def.emoji} ${def.name} — Growing\n⏱ ${formatSeconds(remaining)} remaining`
+          : `${def.emoji} ${def.name} — Ready to harvest!`
+        setTooltip({ content })
+        if (remaining === 0) clearHoverCountdown()
+      }, 250)
+    }
 
     scene.onTileClick = (x, y) => {
       const state = useGameStore.getState()
@@ -66,6 +93,9 @@ export function GameCanvas() {
       }
       prevHoverKey.current = key
       scene.highlightTile(x, y)
+
+      // Stop any running countdown for the previous tile
+      clearHoverCountdown()
 
       const state = useGameStore.getState()
       const tile = state.grid[y]?.[x]
@@ -105,6 +135,8 @@ export function GameCanvas() {
           content = remaining > 0
             ? `${def.emoji} ${def.name} — Growing\n⏱ ${formatSeconds(remaining)} remaining`
             : `${def.emoji} ${def.name} — Ready to harvest!`
+          // Start live countdown for this growing crop
+          startHoverCountdown(x, y)
         } else if (plot.status === 'harvestable' && plot.cropType) {
           const def = CropManager.getCropDefinition(plot.cropType)
           content = `${def.emoji} ${def.name} — Ready!\nClick to harvest ✨`
@@ -114,6 +146,7 @@ export function GameCanvas() {
     }
 
     scene.onHoverClear = () => {
+      clearHoverCountdown()
       if (prevHoverKey.current) {
         const [px, py] = prevHoverKey.current.split(',').map(Number)
         scene.unhighlightTile(px, py)
@@ -193,6 +226,7 @@ export function GameCanvas() {
       clearInterval(cropTicker)
       clearInterval(marketTicker)
       resizeObserver.disconnect()
+      clearHoverCountdown()
     }
   }, [])
 
