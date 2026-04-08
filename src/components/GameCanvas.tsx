@@ -48,7 +48,7 @@ export function GameCanvas() {
       } else if (tile.type === 'locked') {
         buyLand(x, y)
       } else if (tile.type === 'building' && building) {
-        // No action on buildings for now — tooltip shows info
+        setBuildingMenuTile({ x, y })
       } else if (tile.type === 'unlocked' ||
                  (tile.type === 'plot' && (!plot || plot.status === 'empty'))) {
         setBuildingMenuTile({ x, y })

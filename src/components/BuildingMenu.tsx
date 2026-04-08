@@ -6,7 +6,7 @@ import { getAdjustedGrowDuration, getBestCropsForSeason, SEASON_CONFIGS } from '
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import type { BuildingType, CropType } from '../types'
 
-type View = 'choose' | 'plant' | 'build'
+type View = 'choose' | 'plant' | 'build' | 'sell'
 
 export function BuildingMenu() {
   const buildingMenuTile = useGameStore(s => s.buildingMenuTile)
@@ -16,8 +16,10 @@ export function BuildingMenu() {
   const setSelectedTile = useGameStore(s => s.setSelectedTile)
   const plantCrop = useGameStore(s => s.plantCrop)
   const placeBuilding = useGameStore(s => s.placeBuilding)
+  const sellBuilding = useGameStore(s => s.sellBuilding)
   const grid = useGameStore(s => s.grid)
   const plots = useGameStore(s => s.plots)
+  const buildings = useGameStore(s => s.buildings)
 
   const [view, setView] = useState<View>('choose')
 
@@ -25,6 +27,9 @@ export function BuildingMenu() {
   useEffect(() => {
     if (buildingMenuTile) setView('choose')
   }, [buildingMenuTile?.x, buildingMenuTile?.y])
+
+  const tileType = buildingMenuTile ? grid[buildingMenuTile.y]?.[buildingMenuTile.x]?.type : undefined
+  const effectiveView: View = tileType === 'building' ? 'sell' : view
 
   const close = useCallback(() => {
     setBuildingMenuTile(null)
@@ -38,7 +43,6 @@ export function BuildingMenu() {
 
   if (!tile) return null
 
-  const tileType = grid[tile.y]?.[tile.x]?.type
   const plotState = plots[`${tile.x},${tile.y}`]
   const canBuild = tileType === 'unlocked' ||
     (tileType === 'plot' && (!plotState || plotState.status === 'empty'))
@@ -82,7 +86,7 @@ export function BuildingMenu() {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h2 style={{ margin: 0, fontSize: 20 }}>
-            {view === 'choose' ? '🌿 What would you like to do?' : view === 'plant' ? '🌱 Plant a Crop' : '🏗️ Construct a Building'}
+            {effectiveView === 'choose' ? '🌿 What would you like to do?' : effectiveView === 'plant' ? '🌱 Plant a Crop' : effectiveView === 'build' ? '🏗️ Construct a Building' : '🏚️ Sell Building'}
           </h2>
           <button onClick={close} style={{ background: 'none', border: 'none', color: '#f5e6c8', fontSize: 18, cursor: 'pointer' }}>✕</button>
         </div>
@@ -92,7 +96,7 @@ export function BuildingMenu() {
         </div>
 
         {/* Back button */}
-        {view !== 'choose' && (
+        {(effectiveView === 'plant' || effectiveView === 'build') && (
           <button
             onClick={() => setView('choose')}
             style={{
@@ -104,7 +108,7 @@ export function BuildingMenu() {
         )}
 
         {/* Choose view */}
-        {view === 'choose' && (
+        {effectiveView === 'choose' && (
           <div style={{ display: 'flex', gap: 10 }}>
             <ActionCard
               emoji="🌱"
@@ -124,7 +128,7 @@ export function BuildingMenu() {
         )}
 
         {/* Plant view */}
-        {view === 'plant' && (
+        {effectiveView === 'plant' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {crops.map(crop => {
               const canAfford = balance >= crop.seedCost
@@ -170,7 +174,7 @@ export function BuildingMenu() {
         )}
 
         {/* Build view */}
-        {view === 'build' && (
+        {effectiveView === 'build' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {(Object.values(BUILDING_DEFS) as typeof BUILDING_DEFS[BuildingType][]).map(def => {
               const canAfford = balance >= def.cost
@@ -204,6 +208,52 @@ export function BuildingMenu() {
             })}
           </div>
         )}
+        {/* Sell view */}
+        {effectiveView === 'sell' && tile && (() => {
+          const buildingData = buildings[`${tile.x},${tile.y}`]
+          if (!buildingData) return null
+          const def = BUILDING_DEFS[buildingData.type]
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 14,
+                padding: '14px 16px', borderRadius: 10,
+                border: '1px solid rgba(200,160,60,0.4)',
+                background: 'rgba(255,255,255,0.05)',
+              }}>
+                <span style={{ fontSize: 32 }}>{def.emoji}</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>{def.name}</div>
+                  <div style={{ fontSize: 12, color: '#a89070', marginTop: 2 }}>{def.description}</div>
+                </div>
+              </div>
+              <div style={{ fontSize: 14, color: '#c8a96e', textAlign: 'center' }}>
+                Sell for <strong style={{ color: '#ffd700' }}>{def.cost} 💰</strong> (full refund)?<br />
+                <span style={{ fontSize: 12, color: '#807060' }}>The tile will become usable land again.</span>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={close}
+                  style={{
+                    flex: 1, padding: '10px 0', borderRadius: 10,
+                    border: '1px solid rgba(200,160,60,0.3)',
+                    background: 'rgba(255,255,255,0.04)',
+                    color: '#a89070', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14,
+                  }}
+                >Cancel</button>
+                <button
+                  onClick={() => { sellBuilding(tile.x, tile.y); close() }}
+                  style={{
+                    flex: 1, padding: '10px 0', borderRadius: 10,
+                    border: '1px solid rgba(220,80,60,0.6)',
+                    background: 'rgba(220,80,60,0.15)',
+                    color: '#ff8870', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
+                  }}
+                >🏚️ Sell Building</button>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

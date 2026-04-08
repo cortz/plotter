@@ -49,6 +49,7 @@ export interface GameActions {
   buyLand: (x: number, y: number) => void
   sellCrop: (cropType: CropType, amount: number) => void
   placeBuilding: (x: number, y: number, type: import('../types').BuildingType) => void
+  sellBuilding: (x: number, y: number) => void
   tickCrops: () => void
   updateMarketPrices: (prices: Record<CropType, number>, histories: Record<CropType, number[]>, event: MarketEvent | null) => void
   updateSeason: (season: Season, startedAt: number) => void
@@ -259,6 +260,30 @@ export const useGameStore = create<Store>((set, get) => ({
       plots: newPlots,
       buildings: newBuildings,
       balance: s.balance - def.cost,
+      buildingMenuTile: null,
+    }
+    set(next)
+    persist(next)
+  },
+
+  sellBuilding: (x, y) => {
+    const s = get()
+    const key = `${x},${y}`
+    const building = s.buildings[key]
+    if (!building || s.grid[y][x].type !== 'building') return
+
+    const refund = BUILDING_DEFS[building.type].cost
+    const newBuildings = { ...s.buildings }
+    delete newBuildings[key]
+
+    const newGrid = s.grid.map(row => row.map(t => ({ ...t })))
+    newGrid[y][x] = { x, y, type: 'unlocked' }
+
+    const next: GameState = {
+      ...s,
+      grid: newGrid,
+      buildings: newBuildings,
+      balance: s.balance + refund,
       buildingMenuTile: null,
     }
     set(next)
