@@ -4,8 +4,8 @@ import { useGameStore } from '../store/gameStore'
 import { CropManager } from '../modules/CropManager'
 import { LandExpansionManager } from '../modules/LandExpansionManager'
 import { marketPriceEngine } from '../modules/MarketPriceEngine'
-import { SEASON_DURATION_MS, SEASONS, SeasonManager } from '../modules/SeasonManager'
-import { BUILDING_DEFS } from '../modules/BuildingManager'
+import { SEASON_DURATION_MS, SEASONS, SeasonManager, SEASON_CONFIGS, getAdjustedGrowDuration } from '../modules/SeasonManager'
+import { BUILDING_DEFS, getEffectiveGrowDuration } from '../modules/BuildingManager'
 import type { Season } from '../types'
 
 function formatSeconds(ms: number): string {
@@ -24,6 +24,7 @@ export function GameCanvas() {
   const grid = useGameStore(s => s.grid)
   const plots = useGameStore(s => s.plots)
   const buildings = useGameStore(s => s.buildings)
+  const selectedTiles = useGameStore(s => s.selectedTiles)
   const setBuildingMenuTile = useGameStore(s => s.setBuildingMenuTile)
   const setTooltip = useGameStore(s => s.setTooltip)
   const harvestPlot = useGameStore(s => s.harvestPlot)
@@ -95,8 +96,17 @@ export function GameCanvas() {
           content = '🪵 Empty Plot\nClick to plant a crop'
         } else if (plot.status === 'growing' && plot.cropType && plot.plantedAt) {
           const def = CropManager.getCropDefinition(plot.cropType)
-          const remaining = Math.max(0, def.growDuration - (Date.now() - plot.plantedAt))
-          content = `${def.emoji} ${def.name} — Growing\n⏱ ${formatSeconds(remaining)} remaining`
+          const seasonMod = SEASON_CONFIGS[state.currentSeason].growthMod[plot.cropType]
+          const seasonAdjusted = getAdjustedGrowDuration(def.growDuration, plot.cropType, state.currentSeason)
+          const effectiveDuration = getEffectiveGrowDuration(
+            seasonAdjusted, plot.cropType, x, y,
+            state.buildings as Record<string, { type: import('../types').BuildingType }>,
+            seasonMod, def.growDuration
+          )
+          const remaining = Math.max(0, effectiveDuration - (Date.now() - plot.plantedAt))
+          content = remaining > 0
+            ? `${def.emoji} ${def.name} — Growing\n⏱ ${formatSeconds(remaining)} remaining`
+            : `${def.emoji} ${def.name} — Ready to harvest!`
         } else if (plot.status === 'harvestable' && plot.cropType) {
           const def = CropManager.getCropDefinition(plot.cropType)
           content = `${def.emoji} ${def.name} — Ready!\nClick to harvest ✨`
@@ -112,6 +122,35 @@ export function GameCanvas() {
         prevHoverKey.current = null
       }
       setTooltip(null)
+    }
+
+    scene.onTileSelect = (tiles) => {
+      const state = useGameStore.getState()
+
+      const harvestable = tiles.filter(({ x, y }) => {
+        const plot = state.plots[`${x},${y}`]
+        return plot?.status === 'harvestable'
+      })
+
+      const plantable = tiles.filter(({ x, y }) => {
+        const tile = state.grid[y][x]
+        const key = `${x},${y}`
+        const plot = state.plots[key]
+        return tile.type === 'unlocked' || (tile.type === 'plot' && (!plot || plot.status === 'empty'))
+      })
+
+      if (harvestable.length > 0) {
+        state.harvestMulti(harvestable)
+      }
+
+      if (plantable.length === 1) {
+        scene.clearSelection()
+        state.setBuildingMenuTile(plantable[0])
+      } else if (plantable.length > 1) {
+        state.setSelectedTiles(plantable)
+      } else if (harvestable.length === 0) {
+        scene.clearSelection()
+      }
     }
 
     scene.startLoop()
@@ -158,6 +197,13 @@ export function GameCanvas() {
       resizeObserver.disconnect()
     }
   }, [])
+
+  // Clear scene selection highlights whenever selectedTiles is cleared from the store
+  useEffect(() => {
+    if (selectedTiles.length === 0 && sceneRef.current) {
+      sceneRef.current.clearSelection()
+    }
+  }, [selectedTiles.length])
 
   // Rebuild scene whenever grid, plots, or buildings change
   useEffect(() => {

@@ -32,6 +32,8 @@ export class SceneManager {
   private isDragging = false
   private dragDist = 0
   private lastMouse = { x: 0, y: 0 }
+  private dragStartTile: { x: number; y: number } | null = null
+  private selectionKeys = new Set<string>()
   // Camera look target (center of 9x9 grid)
   private lookTarget = new THREE.Vector3(
     ((GRID_SIZE - 1) / 2) * (TILE_SIZE + TILE_GAP),
@@ -46,6 +48,7 @@ export class SceneManager {
   onTileClick?: (x: number, y: number) => void
   onTileHover?: (x: number, y: number) => void
   onHoverClear?: () => void
+  onTileSelect?: (tiles: { x: number; y: number }[]) => void
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -99,13 +102,42 @@ export class SceneManager {
   }
 
   private onMouseDown = (e: MouseEvent) => {
+    const rect = this.canvas.getBoundingClientRect()
+    this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+    this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+
     this.isDragging = true
     this.dragDist = 0
     this.lastMouse = { x: e.clientX, y: e.clientY }
+
+    // Detect whether drag starts on a tile (selection mode) or empty space (pan mode)
+    this.raycaster.setFromCamera(this.mouse, this.camera)
+    const hits = this.raycaster.intersectObjects([...this.tileMeshes.values()])
+    if (hits.length > 0) {
+      const [tx, ty] = (hits[0].object.userData.key as string).split(',').map(Number)
+      this.dragStartTile = { x: tx, y: ty }
+    } else {
+      this.dragStartTile = null
+    }
   }
 
   private onMouseUp = () => {
     this.isDragging = false
+
+    if (this.dragStartTile && this.dragDist > DRAG_THRESHOLD && this.selectionKeys.size > 0) {
+      const tiles = [...this.selectionKeys].map(key => {
+        const [x, y] = key.split(',').map(Number)
+        return { x, y }
+      })
+      this.onTileSelect?.(tiles)
+      // Selection highlights stay until clearSelection() is called externally
+    } else if (!this.dragStartTile || this.dragDist <= DRAG_THRESHOLD) {
+      // No selection drag — clean up any partial highlights
+      this.clearSelectionHighlights()
+      this.selectionKeys.clear()
+    }
+
+    this.dragStartTile = null
   }
 
   private onMouseMove = (e: MouseEvent) => {
@@ -118,19 +150,29 @@ export class SceneManager {
       const dy = e.clientY - this.lastMouse.y
       this.dragDist += Math.sqrt(dx * dx + dy * dy)
       if (this.dragDist > DRAG_THRESHOLD) {
-        const speed = 0.025
-        this.lookTarget.addScaledVector(this.PAN_RIGHT, dx * speed)
-        this.lookTarget.addScaledVector(this.PAN_DOWN, -dy * speed)
-        this.positionCamera()
+        if (this.dragStartTile) {
+          // Selection mode — suppress pan, update bounding box below
+        } else {
+          // Pan mode
+          const speed = 0.025
+          this.lookTarget.addScaledVector(this.PAN_RIGHT, dx * speed)
+          this.lookTarget.addScaledVector(this.PAN_DOWN, -dy * speed)
+          this.positionCamera()
+        }
       }
     }
     this.lastMouse = { x: e.clientX, y: e.clientY }
 
-    // Hover
+    // Hover detection + selection bounding box update
     this.raycaster.setFromCamera(this.mouse, this.camera)
     const hits = this.raycaster.intersectObjects([...this.tileMeshes.values()])
     if (hits.length > 0) {
       const [hx, hy] = (hits[0].object.userData.key as string).split(',').map(Number)
+
+      if (this.isDragging && this.dragStartTile && this.dragDist > DRAG_THRESHOLD) {
+        this.updateSelectionBox(hx, hy)
+      }
+
       this.onTileHover?.(hx, hy)
     } else {
       this.onHoverClear?.()
@@ -240,13 +282,53 @@ export class SceneManager {
   }
 
   highlightTile(x: number, y: number) {
-    const mesh = this.tileMeshes.get(`${x},${y}`)
+    const key = `${x},${y}`
+    if (this.selectionKeys.has(key)) return // Selection highlight takes priority
+    const mesh = this.tileMeshes.get(key)
     if (mesh) (mesh.material as THREE.MeshLambertMaterial).emissive.setHex(0x333333)
   }
 
   unhighlightTile(x: number, y: number) {
-    const mesh = this.tileMeshes.get(`${x},${y}`)
+    const key = `${x},${y}`
+    if (this.selectionKeys.has(key)) return // Don't clear selection highlight on hover-out
+    const mesh = this.tileMeshes.get(key)
     if (mesh) (mesh.material as THREE.MeshLambertMaterial).emissive.setHex(0x000000)
+  }
+
+  private updateSelectionBox(endX: number, endY: number) {
+    if (!this.dragStartTile) return
+
+    const minX = Math.min(this.dragStartTile.x, endX)
+    const maxX = Math.max(this.dragStartTile.x, endX)
+    const minY = Math.min(this.dragStartTile.y, endY)
+    const maxY = Math.max(this.dragStartTile.y, endY)
+
+    // Clear previous selection highlights
+    this.clearSelectionHighlights()
+    this.selectionKeys.clear()
+
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const key = `${x},${y}`
+        if (this.tileMeshes.has(key)) {
+          this.selectionKeys.add(key)
+          const mesh = this.tileMeshes.get(key)!
+          ;(mesh.material as THREE.MeshLambertMaterial).emissive.setHex(0x0055ff)
+        }
+      }
+    }
+  }
+
+  private clearSelectionHighlights() {
+    this.selectionKeys.forEach(key => {
+      const mesh = this.tileMeshes.get(key)
+      if (mesh) (mesh.material as THREE.MeshLambertMaterial).emissive.setHex(0x000000)
+    })
+  }
+
+  clearSelection() {
+    this.clearSelectionHighlights()
+    this.selectionKeys.clear()
   }
 
   startLoop() {

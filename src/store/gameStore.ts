@@ -30,6 +30,7 @@ export interface GameState {
   balance: number
   inventory: Record<CropType, number>
   selectedTile: { x: number; y: number } | null
+  selectedTiles: { x: number; y: number }[]
   buildingMenuTile: { x: number; y: number } | null
   marketOpen: boolean
   tooltip: TooltipData | null
@@ -42,7 +43,9 @@ export interface GameState {
 
 export interface GameActions {
   plantCrop: (x: number, y: number, cropType: CropType) => void
+  plantCropMulti: (tiles: { x: number; y: number }[], cropType: CropType) => void
   harvestPlot: (x: number, y: number) => void
+  harvestMulti: (tiles: { x: number; y: number }[]) => void
   buyLand: (x: number, y: number) => void
   sellCrop: (cropType: CropType, amount: number) => void
   placeBuilding: (x: number, y: number, type: import('../types').BuildingType) => void
@@ -50,6 +53,7 @@ export interface GameActions {
   updateMarketPrices: (prices: Record<CropType, number>, histories: Record<CropType, number[]>, event: MarketEvent | null) => void
   updateSeason: (season: Season, startedAt: number) => void
   setSelectedTile: (pos: { x: number; y: number } | null) => void
+  setSelectedTiles: (tiles: { x: number; y: number }[]) => void
   setBuildingMenuTile: (pos: { x: number; y: number } | null) => void
   setTooltip: (tooltip: TooltipData | null) => void
   toggleMarket: () => void
@@ -83,6 +87,7 @@ export const useGameStore = create<Store>((set, get) => ({
   balance: STARTING_BALANCE,
   inventory: createInitialInventory(),
   selectedTile: null,
+  selectedTiles: [],
   buildingMenuTile: null,
   marketOpen: false,
   tooltip: null,
@@ -122,6 +127,42 @@ export const useGameStore = create<Store>((set, get) => ({
     persist(next)
   },
 
+  plantCropMulti: (tiles, cropType) => {
+    const s = get()
+    const cropDef = CropManager.getCropDefinition(cropType)
+
+    const validTiles = tiles.filter(({ x, y }) => {
+      const tile = s.grid[y][x]
+      const key = `${x},${y}`
+      const isEmptyPlot = tile.type === 'plot' && (!s.plots[key] || s.plots[key].status === 'empty')
+      return tile.type === 'unlocked' || isEmptyPlot
+    })
+    if (validTiles.length === 0) return
+
+    const totalCost = cropDef.seedCost * validTiles.length
+    if (s.balance < totalCost) return
+
+    const newGrid = s.grid.map(row => row.map(t => ({ ...t })))
+    const newPlots = { ...s.plots }
+    const now = Date.now()
+
+    for (const { x, y } of validTiles) {
+      const key = `${x},${y}`
+      newGrid[y][x] = { x, y, type: 'plot' }
+      newPlots[key] = { cropType, plantedAt: now, status: 'growing' }
+    }
+
+    const next: GameState = {
+      ...s,
+      grid: newGrid,
+      plots: newPlots,
+      balance: s.balance - totalCost,
+      selectedTiles: [],
+    }
+    set(next)
+    persist(next)
+  },
+
   harvestPlot: (x, y) => {
     const s = get()
     const key = `${x},${y}`
@@ -132,6 +173,24 @@ export const useGameStore = create<Store>((set, get) => ({
     const newPlots = { ...s.plots, [key]: { cropType: null, plantedAt: null, status: 'empty' as const } }
 
     const next: GameState = { ...s, plots: newPlots, inventory: newInventory, selectedTile: null }
+    set(next)
+    persist(next)
+  },
+
+  harvestMulti: (tiles) => {
+    const s = get()
+    const newInventory = { ...s.inventory }
+    const newPlots = { ...s.plots }
+
+    for (const { x, y } of tiles) {
+      const key = `${x},${y}`
+      const plot = s.plots[key]
+      if (!plot || plot.status !== 'harvestable' || !plot.cropType) continue
+      newInventory[plot.cropType] = (newInventory[plot.cropType] ?? 0) + 1
+      newPlots[key] = { cropType: null, plantedAt: null, status: 'empty' as const }
+    }
+
+    const next: GameState = { ...s, plots: newPlots, inventory: newInventory, selectedTiles: [] }
     set(next)
     persist(next)
   },
@@ -256,6 +315,7 @@ export const useGameStore = create<Store>((set, get) => ({
   },
 
   setSelectedTile: pos => set({ selectedTile: pos }),
+  setSelectedTiles: tiles => set({ selectedTiles: tiles }),
   setBuildingMenuTile: pos => set({ buildingMenuTile: pos }),
   setTooltip: tooltip => set({ tooltip }),
   toggleMarket: () => set(s => ({ marketOpen: !s.marketOpen })),

@@ -3,6 +3,7 @@ import { GameCanvas } from './components/GameCanvas'
 import { HUD } from './components/HUD'
 import { MarketPanel } from './components/MarketPanel'
 import { BuildingMenu } from './components/BuildingMenu'
+import { MultiPlantingMenu } from './components/MultiPlantingMenu'
 import { Tooltip } from './components/Tooltip'
 import { MarketEventToast } from './components/MarketEventToast'
 import { SeasonBadge } from './components/SeasonBadge'
@@ -31,6 +32,7 @@ function App() {
       <HUD />
       <MarketPanel />
       <BuildingMenu />
+      <MultiPlantingMenu />
       <Tooltip />
       <MarketEventToast />
       <SeasonTransitionToast />
@@ -57,7 +59,7 @@ function App() {
         pointerEvents: 'none',
         userSelect: 'none',
       }}>
-        🌾 Plot — drag to pan · click tiles to interact
+        🌾 Plot — drag tiles to select · click to interact
       </div>
     </div>
   )
