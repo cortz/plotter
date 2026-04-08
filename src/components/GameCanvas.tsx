@@ -4,8 +4,8 @@ import { useGameStore } from '../store/gameStore'
 import { CropManager } from '../modules/CropManager'
 import { LandExpansionManager } from '../modules/LandExpansionManager'
 import { marketPriceEngine } from '../modules/MarketPriceEngine'
-import { SEASON_DURATION_MS, SEASONS, SeasonManager, SEASON_CONFIGS, getAdjustedGrowDuration } from '../modules/SeasonManager'
-import { BUILDING_DEFS, getEffectiveGrowDuration } from '../modules/BuildingManager'
+import { SEASON_DURATION_MS, SEASONS, SeasonManager } from '../modules/SeasonManager'
+import { BUILDING_DEFS } from '../modules/BuildingManager'
 import type { Season } from '../types'
 
 function formatSeconds(ms: number): string {
@@ -43,7 +43,10 @@ export function GameCanvas() {
       const plot = state.plots[key]
       const building = state.buildings[key]
 
-      if (tile.type === 'plot' && plot?.status === 'harvestable') {
+      if (tile.type === 'plot' && (
+        plot?.status === 'harvestable' ||
+        (plot?.status === 'growing' && plot.harvestableAt != null && Date.now() >= plot.harvestableAt)
+      )) {
         harvestPlot(x, y)
       } else if (tile.type === 'locked') {
         buyLand(x, y)
@@ -96,14 +99,9 @@ export function GameCanvas() {
           content = '🪵 Empty Plot\nClick to plant a crop'
         } else if (plot.status === 'growing' && plot.cropType && plot.plantedAt) {
           const def = CropManager.getCropDefinition(plot.cropType)
-          const seasonMod = SEASON_CONFIGS[state.currentSeason].growthMod[plot.cropType]
-          const seasonAdjusted = getAdjustedGrowDuration(def.growDuration, plot.cropType, state.currentSeason)
-          const effectiveDuration = getEffectiveGrowDuration(
-            seasonAdjusted, plot.cropType, x, y,
-            state.buildings as Record<string, { type: import('../types').BuildingType }>,
-            seasonMod, def.growDuration
-          )
-          const remaining = Math.max(0, effectiveDuration - (Date.now() - plot.plantedAt))
+          const remaining = plot.harvestableAt
+            ? Math.max(0, plot.harvestableAt - Date.now())
+            : 0
           content = remaining > 0
             ? `${def.emoji} ${def.name} — Growing\n⏱ ${formatSeconds(remaining)} remaining`
             : `${def.emoji} ${def.name} — Ready to harvest!`

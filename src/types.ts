@@ -57,6 +57,7 @@ export interface TileData {
 export interface PlotState {
   cropType: CropType | null
   plantedAt: number | null
+  harvestableAt: number | null
   status: PlotStatus
 }
 
