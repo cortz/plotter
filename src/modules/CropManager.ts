@@ -1,5 +1,8 @@
 import type { CropDefinition, CropType } from '../types'
 
+export const SPOIL_DURATION_MS = 5 * 60 * 1000  // 5 minutes after harvestable
+export const COMPOST_GROWTH_MOD = 0.80           // 20% faster growth per compost unit
+
 const CATALOGUE: Record<CropType, CropDefinition> = {
   wheat: {
     type: 'wheat',

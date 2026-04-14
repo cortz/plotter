@@ -4,7 +4,9 @@ export type TileType = 'locked' | 'unlocked' | 'plot' | 'building'
 
 export type BuildingType = 'barn' | 'greenhouse' | 'windmill'
 
-export type PlotStatus = 'empty' | 'growing' | 'harvestable'
+export type PlotStatus = 'empty' | 'growing' | 'harvestable' | 'spoiled'
+
+export type InventoryItem = CropType | 'compost'
 
 export type Season = 'spring' | 'summer' | 'autumn' | 'winter'
 
@@ -58,6 +60,7 @@ export interface PlotState {
   cropType: CropType | null
   plantedAt: number | null
   harvestableAt: number | null
+  spoilsAt: number | null
   status: PlotStatus
 }
 
@@ -78,7 +81,7 @@ export interface PersistedState {
   plots: Record<string, PlotState>
   buildings: Record<string, BuildingData>
   balance: number
-  inventory: Record<CropType, number>
+  inventory: Record<InventoryItem, number>
   marketPrices: Record<CropType, number>
   priceHistories: Record<CropType, number[]>
   lastMarketEvent: MarketEvent | null

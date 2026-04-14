@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import type { CropType, TileData, PlotState, TooltipData, MarketEvent, Season, BuildingData } from '../types'
-import { CropManager } from '../modules/CropManager'
+import type { CropType, TileData, PlotState, TooltipData, MarketEvent, Season, BuildingData, InventoryItem } from '../types'
+import { CropManager, SPOIL_DURATION_MS, COMPOST_GROWTH_MOD } from '../modules/CropManager'
 import { SaveManager } from '../modules/SaveManager'
 import { LandExpansionManager } from '../modules/LandExpansionManager'
 import { marketPriceEngine } from '../modules/MarketPriceEngine'
@@ -10,7 +10,9 @@ import { BUILDING_DEFS, BARN_BONUS, getEffectiveGrowDuration, tileDistance } fro
 const GRID_SIZE = 9
 const STARTING_BALANCE = 200
 
-/** Compute the absolute timestamp when a crop at (x,y) will be harvestable. */
+/** Compute the absolute timestamp when a crop at (x,y) will be harvestable.
+ * @param extraMod - optional additional multiplier (e.g. COMPOST_GROWTH_MOD)
+ */
 function computeHarvestableAt(
   x: number,
   y: number,
@@ -18,12 +20,13 @@ function computeHarvestableAt(
   plantedAt: number,
   season: Season,
   buildings: Record<string, { type: import('../types').BuildingType }>,
+  extraMod = 1,
 ): number {
   const def = CropManager.getCropDefinition(cropType)
   const seasonMod = SEASON_CONFIGS[season].growthMod[cropType]
   const seasonAdjusted = getAdjustedGrowDuration(def.growDuration, cropType, season)
   const effectiveDuration = getEffectiveGrowDuration(seasonAdjusted, cropType, x, y, buildings, seasonMod, def.growDuration)
-  return plantedAt + effectiveDuration
+  return plantedAt + Math.round(effectiveDuration * extraMod)
 }
 
 /**
@@ -65,8 +68,8 @@ function createInitialGrid(): TileData[][] {
   )
 }
 
-function createInitialInventory(): Record<CropType, number> {
-  return { wheat: 0, corn: 0, pumpkin: 0 }
+function createInitialInventory(): Record<InventoryItem, number> {
+  return { wheat: 0, corn: 0, pumpkin: 0, compost: 0 }
 }
 
 export interface GameState {
@@ -74,7 +77,7 @@ export interface GameState {
   plots: Record<string, PlotState>
   buildings: Record<string, BuildingData>
   balance: number
-  inventory: Record<CropType, number>
+  inventory: Record<InventoryItem, number>
   selectedTile: { x: number; y: number } | null
   selectedTiles: { x: number; y: number }[]
   buildingMenuTile: { x: number; y: number } | null
@@ -83,6 +86,7 @@ export interface GameState {
   marketPrices: Record<CropType, number>
   priceHistories: Record<CropType, number[]>
   lastMarketEvent: MarketEvent | null
+  lastSpoilEvent: { cropType: CropType; firedAt: number } | null
   currentSeason: Season
   seasonStartedAt: number
 }
@@ -141,6 +145,7 @@ export const useGameStore = create<Store>((set, get) => ({
   marketPrices: initialPrices,
   priceHistories: initialHistories,
   lastMarketEvent: null,
+  lastSpoilEvent: null,
   currentSeason: 'spring' as Season,
   seasonStartedAt: Date.now(),
 
@@ -159,12 +164,19 @@ export const useGameStore = create<Store>((set, get) => ({
     const gridWithRoads = newGrid
 
     const now = Date.now()
+    const compostAvailable = s.inventory.compost ?? 0
+    const useCompost = compostAvailable > 0
+    const compostMod = useCompost ? COMPOST_GROWTH_MOD : 1
+    const newInventory = { ...s.inventory }
+    if (useCompost) newInventory.compost = compostAvailable - 1
+
     const newPlots: Record<string, PlotState> = {
       ...s.plots,
       [key]: {
         cropType,
         plantedAt: now,
-        harvestableAt: computeHarvestableAt(x, y, cropType, now, s.currentSeason, s.buildings),
+        harvestableAt: computeHarvestableAt(x, y, cropType, now, s.currentSeason, s.buildings, compostMod),
+        spoilsAt: null,
         status: 'growing',
       },
     }
@@ -174,6 +186,7 @@ export const useGameStore = create<Store>((set, get) => ({
       grid: gridWithRoads,
       plots: newPlots,
       balance: s.balance - cropDef.seedCost,
+      inventory: newInventory,
       selectedTile: null,
     }
     set(next)
@@ -198,14 +211,20 @@ export const useGameStore = create<Store>((set, get) => ({
     const newGrid = s.grid.map(row => row.map(t => ({ ...t })))
     const newPlots = { ...s.plots }
     const now = Date.now()
+    const compostAvailable = s.inventory.compost ?? 0
+    let compostUsed = 0
 
     for (const { x, y } of validTiles) {
       const key = `${x},${y}`
       newGrid[y][x] = { x, y, type: 'plot' }
+      const useCompost = compostUsed < compostAvailable
+      if (useCompost) compostUsed++
+      const compostMod = useCompost ? COMPOST_GROWTH_MOD : 1
       newPlots[key] = {
         cropType,
         plantedAt: now,
-        harvestableAt: computeHarvestableAt(x, y, cropType, now, s.currentSeason, s.buildings),
+        harvestableAt: computeHarvestableAt(x, y, cropType, now, s.currentSeason, s.buildings, compostMod),
+        spoilsAt: null,
         status: 'growing',
       }
     }
@@ -215,6 +234,7 @@ export const useGameStore = create<Store>((set, get) => ({
       grid: newGrid,
       plots: newPlots,
       balance: s.balance - totalCost,
+      inventory: { ...s.inventory, compost: compostAvailable - compostUsed },
       selectedTiles: [],
     }
     set(next)
@@ -226,13 +246,24 @@ export const useGameStore = create<Store>((set, get) => ({
     const key = `${x},${y}`
     const plot = s.plots[key]
     const now = Date.now()
+
+    const emptyPlot: PlotState = { cropType: null, plantedAt: null, harvestableAt: null, spoilsAt: null, status: 'empty' as const }
+
+    // Spoiled plot: compost already credited in tickCrops, just clear the tile
+    if (plot?.status === 'spoiled') {
+      const next: GameState = { ...s, plots: { ...s.plots, [key]: emptyPlot }, selectedTile: null }
+      set(next)
+      persist(next)
+      return
+    }
+
     const isReady =
       plot?.status === 'harvestable' ||
       (plot?.status === 'growing' && plot.harvestableAt != null && now >= plot.harvestableAt)
     if (!isReady || !plot?.cropType) return
 
     const newInventory = { ...s.inventory, [plot.cropType]: (s.inventory[plot.cropType] ?? 0) + 1 }
-    const newPlots = { ...s.plots, [key]: { cropType: null, plantedAt: null, harvestableAt: null, status: 'empty' as const } }
+    const newPlots = { ...s.plots, [key]: emptyPlot }
 
     const next: GameState = { ...s, plots: newPlots, inventory: newInventory, selectedTile: null }
     set(next)
@@ -244,16 +275,24 @@ export const useGameStore = create<Store>((set, get) => ({
     const newInventory = { ...s.inventory }
     const newPlots = { ...s.plots }
     const now = Date.now()
+    const emptyPlot: PlotState = { cropType: null, plantedAt: null, harvestableAt: null, spoilsAt: null, status: 'empty' as const }
 
     for (const { x, y } of tiles) {
       const key = `${x},${y}`
       const plot = s.plots[key]
+
+      if (plot?.status === 'spoiled') {
+        // Compost already credited; just clear the tile
+        newPlots[key] = emptyPlot
+        continue
+      }
+
       const isReady =
         plot?.status === 'harvestable' ||
         (plot?.status === 'growing' && plot.harvestableAt != null && now >= plot.harvestableAt)
       if (!isReady || !plot?.cropType) continue
       newInventory[plot.cropType] = (newInventory[plot.cropType] ?? 0) + 1
-      newPlots[key] = { cropType: null, plantedAt: null, harvestableAt: null, status: 'empty' as const }
+      newPlots[key] = emptyPlot
     }
 
     const next: GameState = { ...s, plots: newPlots, inventory: newInventory, selectedTiles: [] }
@@ -371,32 +410,47 @@ export const useGameStore = create<Store>((set, get) => ({
     const now = Date.now()
     let changed = false
     const newPlots = { ...s.plots }
+    let newCompost = s.inventory.compost ?? 0
+    let latestSpoilEvent = s.lastSpoilEvent
 
     for (const [key, plot] of Object.entries(newPlots)) {
-      if (plot.status !== 'growing' || !plot.cropType || !plot.plantedAt) continue
-      // harvestableAt is the source of truth; fall back to dynamic calc for old saves
-      const isReady = plot.harvestableAt != null
-        ? now >= plot.harvestableAt
-        : (() => {
-            const [x, y] = key.split(',').map(Number)
-            const def = CropManager.getCropDefinition(plot.cropType!)
-            const seasonMod = SEASON_CONFIGS[s.currentSeason].growthMod[plot.cropType!]
-            const seasonAdjusted = getAdjustedGrowDuration(def.growDuration, plot.cropType!, s.currentSeason)
-            const effectiveDuration = getEffectiveGrowDuration(
-              seasonAdjusted, plot.cropType!, x, y,
-              s.buildings as Record<string, { type: import('../types').BuildingType }>,
-              seasonMod, def.growDuration
-            )
-            return now - plot.plantedAt! >= effectiveDuration
-          })()
-      if (isReady) {
-        newPlots[key] = { ...plot, status: 'harvestable' }
+      if (plot.status === 'growing' && plot.cropType && plot.plantedAt) {
+        // harvestableAt is the source of truth; fall back to dynamic calc for old saves
+        const isReady = plot.harvestableAt != null
+          ? now >= plot.harvestableAt
+          : (() => {
+              const [x, y] = key.split(',').map(Number)
+              const def = CropManager.getCropDefinition(plot.cropType!)
+              const seasonMod = SEASON_CONFIGS[s.currentSeason].growthMod[plot.cropType!]
+              const seasonAdjusted = getAdjustedGrowDuration(def.growDuration, plot.cropType!, s.currentSeason)
+              const effectiveDuration = getEffectiveGrowDuration(
+                seasonAdjusted, plot.cropType!, x, y,
+                s.buildings as Record<string, { type: import('../types').BuildingType }>,
+                seasonMod, def.growDuration
+              )
+              return now - plot.plantedAt! >= effectiveDuration
+            })()
+        if (isReady) {
+          const harvestableAt = plot.harvestableAt ?? now
+          newPlots[key] = { ...plot, status: 'harvestable', spoilsAt: harvestableAt + SPOIL_DURATION_MS }
+          changed = true
+        }
+      } else if (plot.status === 'harvestable' && plot.cropType && plot.spoilsAt != null && now >= plot.spoilsAt) {
+        // Crop has gone past its spoilage window — convert to compost
+        newCompost += 1
+        latestSpoilEvent = { cropType: plot.cropType, firedAt: now }
+        newPlots[key] = { ...plot, status: 'spoiled', plantedAt: null, harvestableAt: null, spoilsAt: null }
         changed = true
       }
     }
 
     if (changed) {
-      const next: GameState = { ...s, plots: newPlots }
+      const next: GameState = {
+        ...s,
+        plots: newPlots,
+        inventory: { ...s.inventory, compost: newCompost },
+        lastSpoilEvent: latestSpoilEvent,
+      }
       set(next)
       persist(next)
     }
@@ -416,7 +470,20 @@ export const useGameStore = create<Store>((set, get) => ({
 
   updateSeason: (season, startedAt) => {
     const s = get()
-    const next: GameState = { ...s, currentSeason: season, seasonStartedAt: startedAt }
+    // Recalculate harvestableAt for all growing crops under the new season's growth mod
+    const updatedPlots = { ...s.plots }
+    for (const [key, plot] of Object.entries(updatedPlots)) {
+      if (plot.status !== 'growing' || !plot.cropType || !plot.plantedAt) continue
+      const [x, y] = key.split(',').map(Number)
+      updatedPlots[key] = {
+        ...plot,
+        harvestableAt: computeHarvestableAt(
+          x, y, plot.cropType, plot.plantedAt, season,
+          s.buildings as Record<string, { type: import('../types').BuildingType }>,
+        ),
+      }
+    }
+    const next: GameState = { ...s, currentSeason: season, seasonStartedAt: startedAt, plots: updatedPlots }
     set(next)
     persist(next)
   },
@@ -450,13 +517,14 @@ export const useGameStore = create<Store>((set, get) => ({
         const [px, py] = key.split(',').map(Number)
         plots[key] = {
           ...plot,
+          spoilsAt: plot.spoilsAt ?? null,
           harvestableAt: computeHarvestableAt(
             px, py, plot.cropType, plot.plantedAt, season,
             buildings as Record<string, { type: import('../types').BuildingType }>,
           ),
         }
       } else {
-        plots[key] = plot
+        plots[key] = { ...plot, spoilsAt: plot.spoilsAt ?? null }
       }
     }
 
@@ -465,10 +533,16 @@ export const useGameStore = create<Store>((set, get) => ({
       plots,
       buildings,
       balance: saved.balance ?? STARTING_BALANCE,
-      inventory: saved.inventory ?? createInitialInventory(),
+      inventory: {
+        wheat: saved.inventory?.wheat ?? 0,
+        corn: saved.inventory?.corn ?? 0,
+        pumpkin: saved.inventory?.pumpkin ?? 0,
+        compost: saved.inventory?.compost ?? 0,
+      },
       marketPrices: saved.marketPrices ?? marketPriceEngine.getAllPrices(),
       priceHistories: saved.priceHistories ?? marketPriceEngine.getAllHistories(),
       lastMarketEvent: saved.lastMarketEvent ?? null,
+      lastSpoilEvent: null,
       currentSeason: season,
       seasonStartedAt: saved.seasonStartedAt ?? Date.now(),
     })

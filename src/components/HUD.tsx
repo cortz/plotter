@@ -10,6 +10,8 @@ export function HUD() {
 
   const crops = CropManager.getAllCrops()
   const totalCrops = crops.reduce((acc, c) => acc + (inventory[c.type] ?? 0), 0)
+  const compostCount = inventory.compost ?? 0
+  const hasInventory = totalCrops > 0 || compostCount > 0
 
   return (
     <div style={{
@@ -24,13 +26,18 @@ export function HUD() {
           <span style={{ fontWeight: 700, fontSize: 18 }}>{balance}</span>
         </Panel>
 
-        {totalCrops > 0 && (
+        {hasInventory && (
           <Panel>
             {crops.filter(c => (inventory[c.type] ?? 0) > 0).map(c => (
               <span key={c.type} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {c.emoji} <strong>{inventory[c.type]}</strong>
               </span>
             ))}
+            {compostCount > 0 && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                🪣 <strong>{compostCount}</strong>
+              </span>
+            )}
           </Panel>
         )}
       </div>

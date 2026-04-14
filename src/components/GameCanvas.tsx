@@ -49,17 +49,35 @@ export function GameCanvas() {
       hoverCountdownRef.current = setInterval(() => {
         const state = useGameStore.getState()
         const plot = state.plots[`${x},${y}`]
-        if (!plot || plot.status !== 'growing' || !plot.cropType || !plot.harvestableAt) {
+        if (!plot || !plot.cropType) {
           clearHoverCountdown()
           return
         }
         const def = CropManager.getCropDefinition(plot.cropType)
-        const remaining = Math.max(0, plot.harvestableAt - Date.now())
-        const content = remaining > 0
-          ? `${def.emoji} ${def.name} — Growing\n⏱ ${formatSeconds(remaining)} remaining`
-          : `${def.emoji} ${def.name} — Ready to harvest!`
+        let content = ''
+
+        if (plot.status === 'growing' && plot.harvestableAt && plot.plantedAt) {
+          const remaining = Math.max(0, plot.harvestableAt - Date.now())
+          const totalDuration = plot.harvestableAt - plot.plantedAt
+          const elapsed = Date.now() - plot.plantedAt
+          const pct = Math.min(100, Math.round((elapsed / totalDuration) * 100))
+          content = remaining > 0
+            ? `${def.emoji} ${def.name} — Growing\n⏱ ${formatSeconds(remaining)} remaining (${pct}% done)`
+            : `${def.emoji} ${def.name} — Ready to harvest!`
+          if (remaining === 0) clearHoverCountdown()
+        } else if (plot.status === 'harvestable') {
+          const spoilRemaining = plot.spoilsAt ? Math.max(0, plot.spoilsAt - Date.now()) : null
+          content = `${def.emoji} ${def.name} — Ready!\nClick to harvest ✨`
+          if (spoilRemaining != null && spoilRemaining > 0) {
+            content += `\n⚠️ Spoils in ${formatSeconds(spoilRemaining)}`
+          }
+          if (spoilRemaining === 0) clearHoverCountdown()
+        } else {
+          clearHoverCountdown()
+          return
+        }
+
         setTooltip({ content })
-        if (remaining === 0) clearHoverCountdown()
       }, 250)
     }
 
@@ -72,6 +90,7 @@ export function GameCanvas() {
 
       if (tile.type === 'plot' && (
         plot?.status === 'harvestable' ||
+        plot?.status === 'spoiled' ||
         (plot?.status === 'growing' && plot.harvestableAt != null && Date.now() >= plot.harvestableAt)
       )) {
         harvestPlot(x, y)
@@ -132,14 +151,26 @@ export function GameCanvas() {
           const remaining = plot.harvestableAt
             ? Math.max(0, plot.harvestableAt - Date.now())
             : 0
+          const totalDuration = (plot.harvestableAt && plot.plantedAt) ? plot.harvestableAt - plot.plantedAt : 1
+          const elapsed = Date.now() - plot.plantedAt
+          const pct = Math.min(100, Math.round((elapsed / totalDuration) * 100))
           content = remaining > 0
-            ? `${def.emoji} ${def.name} — Growing\n⏱ ${formatSeconds(remaining)} remaining`
+            ? `${def.emoji} ${def.name} — Growing\n⏱ ${formatSeconds(remaining)} remaining (${pct}% done)`
             : `${def.emoji} ${def.name} — Ready to harvest!`
           // Start live countdown for this growing crop
           startHoverCountdown(x, y)
         } else if (plot.status === 'harvestable' && plot.cropType) {
           const def = CropManager.getCropDefinition(plot.cropType)
+          const spoilRemaining = plot.spoilsAt ? Math.max(0, plot.spoilsAt - Date.now()) : null
           content = `${def.emoji} ${def.name} — Ready!\nClick to harvest ✨`
+          if (spoilRemaining != null && spoilRemaining > 0) {
+            content += `\n⚠️ Spoils in ${formatSeconds(spoilRemaining)}`
+          }
+          // Start live countdown for spoilage timer
+          startHoverCountdown(x, y)
+        } else if (plot.status === 'spoiled' && plot.cropType) {
+          const def = CropManager.getCropDefinition(plot.cropType)
+          content = `🍂 ${def.name} — Spoiled!\nCompost collected · click to clear`
         }
       }
       setTooltip(content ? { content } : null)
@@ -160,7 +191,7 @@ export function GameCanvas() {
 
       const harvestable = tiles.filter(({ x, y }) => {
         const plot = state.plots[`${x},${y}`]
-        return plot?.status === 'harvestable'
+        return plot?.status === 'harvestable' || plot?.status === 'spoiled'
       })
 
       const plantable = tiles.filter(({ x, y }) => {

@@ -16,6 +16,7 @@ let COLORS: Record<string, number> = {
   plot_empty: 0x8b5e3c,
   plot_growing: 0x8fbe45,
   plot_harvestable: 0xffd700,
+  plot_spoiled: 0x4a2e10,
 }
 
 export class SceneManager {
