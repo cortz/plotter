@@ -558,10 +558,36 @@ export const useGameStore = create<Store>((set, get) => ({
       marketPriceEngine.deserialize({ prices: saved.marketPrices, histories: saved.priceHistories })
     }
 
-    // Migrate old saves: convert any 'road' tiles to 'unlocked'
-    const grid = (saved.grid ?? createInitialGrid()).map(row =>
+    // Migrate old saves: convert any 'road' tiles to 'unlocked', then expand grid if smaller than GRID_SIZE
+    let grid = (saved.grid ?? createInitialGrid()).map(row =>
       row.map(t => (t.type as string) === 'road' ? { ...t, type: 'unlocked' as const } : t)
     )
+    if (grid.length < GRID_SIZE) {
+      const oldSize = grid.length
+      const offset = Math.floor((GRID_SIZE - oldSize) / 2)
+      const expanded: TileData[][] = Array.from({ length: GRID_SIZE }, (_, y) =>
+        Array.from({ length: GRID_SIZE }, (_, x) => ({ x, y, type: 'locked' as const }))
+      )
+      for (let oy = 0; oy < oldSize; oy++) {
+        for (let ox = 0; ox < oldSize; ox++) {
+          const ny = oy + offset
+          const nx = ox + offset
+          expanded[ny][nx] = { ...grid[oy][ox], x: nx, y: ny }
+        }
+      }
+      // Re-key plots and buildings with the offset applied
+      const remapKey = (key: string) => {
+        const [kx, ky] = key.split(',').map(Number)
+        return `${kx + offset},${ky + offset}`
+      }
+      const remappedPlots: typeof saved.plots = {}
+      for (const [k, v] of Object.entries(saved.plots ?? {})) remappedPlots[remapKey(k)] = v
+      saved.plots = remappedPlots
+      const remappedBuildings: typeof saved.buildings = {}
+      for (const [k, v] of Object.entries(saved.buildings ?? {})) remappedBuildings[remapKey(k)] = v
+      saved.buildings = remappedBuildings
+      grid = expanded
+    }
 
     const season = saved.currentSeason ?? 'spring'
     const buildings = saved.buildings ?? {}
