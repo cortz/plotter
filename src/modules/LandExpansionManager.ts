@@ -7,7 +7,7 @@ const COST_EXPONENT = 1.9
 
 export const LandExpansionManager = {
   getLandCost: (x: number, y: number): number => {
-    const dist = Math.abs(x - CENTER) + Math.abs(y - CENTER)
+    const dist = Math.max(Math.abs(x - CENTER), Math.abs(y - CENTER))
     return Math.round(BASE_COST * Math.pow(COST_EXPONENT, dist))
   },
 
