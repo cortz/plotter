@@ -2,7 +2,7 @@ import type { TileData } from '../types'
 
 const GRID_SIZE = 15
 const CENTER = Math.floor(GRID_SIZE / 2) // 7
-const BASE_COST = 80
+const BASE_COST = 10
 const COST_EXPONENT = 1.9
 
 export const LandExpansionManager = {
