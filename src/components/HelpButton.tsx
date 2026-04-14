@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { SEASON_CONFIGS, SEASONS } from '../modules/SeasonManager'
-import { CropManager } from '../modules/CropManager'
+import { CropManager, SPOIL_DURATION_MS, INVENTORY_SPOIL_MS, COMPOST_GROWTH_MOD, SUPPLY_PRESSURE_SCALE, SUPPLY_PRESSURE_FLOOR } from '../modules/CropManager'
 import { BUILDING_DEFS } from '../modules/BuildingManager'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import type { BuildingType } from '../types'
@@ -99,19 +99,28 @@ export function HelpButton() {
             {tab === 'basics' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <Section title="🗺️ Your Farm">
-                  You start with a small patch of land. <strong>Click any locked grey tile</strong> to buy it and expand your farm. Land near your existing plots is cheaper.
+                  You start with a small patch of land. <strong>Click any locked grey tile</strong> to buy it and expand your farm. Tiles get <strong>exponentially more expensive</strong> the further from the centre — plan your expansion carefully!
                 </Section>
                 <Section title="🌾 Planting">
                   Click an empty green or brown tile to open the planting menu. Pick a crop, pay the seed cost, and watch it grow!
                 </Section>
                 <Section title="🚜 Harvesting">
-                  When a crop turns <span style={{ color: '#ffd700', fontWeight: 700 }}>gold ✨</span>, it's ready. Click it to harvest and add it to your inventory.
+                  When a crop turns <span style={{ color: '#ffd700', fontWeight: 700 }}>gold ✨</span>, it's ready. Click it to harvest and add it to your inventory. The tooltip shows a % progress bar while it's growing.
+                </Section>
+                <Section title="⏳ Field Spoilage">
+                  If a ripe crop isn't harvested within <strong>{formatDuration(SPOIL_DURATION_MS)}</strong>, it spoils — the tile turns dark brown. A spoiled crop becomes <strong>🪣 Compost</strong> in your inventory instead of a sellable crop.
+                </Section>
+                <Section title="🪣 Compost">
+                  Compost is created from spoiled field crops. When you plant a new crop on a composted tile, the compost is automatically consumed and gives a <strong>{Math.round((1 - COMPOST_GROWTH_MOD) * 100)}% faster grow time</strong>. Don't let compost go to waste!
+                </Section>
+                <Section title="📦 Inventory Expiry">
+                  Harvested crops in your barn expire after <strong>{formatDuration(INVENTORY_SPOIL_MS)}</strong> if not sold. Check the <strong>🏪 Market</strong> for a countdown on your oldest unit — sell before time runs out!
                 </Section>
                 <Section title="💰 Selling">
                   Open the <strong>🏪 Market</strong> to sell your harvested crops for coins. Use coins to buy more seeds and land.
                 </Section>
                 <div style={{ background: 'rgba(200,160,60,0.1)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#c8a96e' }}>
-                  💡 <strong>Tip:</strong> Hold and drag the scene to pan the camera around your farm.
+                  💡 <strong>Tips:</strong> Hold and drag to pan the camera. Scroll the mouse wheel to zoom in and out.
                 </div>
                 <div style={{ marginTop: 4 }}>
                   <div style={{ fontWeight: 700, marginBottom: 8, color: '#c8a96e' }}>Crops at a glance:</div>
@@ -152,8 +161,21 @@ export function HelpButton() {
                 <Section title="⚡ Market Events">
                   Random events (droughts, bumper harvests, festivals…) can cause sudden price spikes or drops. A banner will flash when an event hits — react fast!
                 </Section>
+                <Section title="📉 Supply Pressure">
+                  Selling the same crop too many times in one season drives its price down. When you've flooded the market you'll see a <strong>⚠️ Oversupply</strong> warning showing the current penalty. Prices reset at the start of each new season.
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                    {crops.map(c => (
+                      <span key={c.type} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: 'rgba(230,100,60,0.12)', color: '#f0a060', fontWeight: 600 }}>
+                        {c.emoji} {c.name}: max −{Math.round((1 - SUPPLY_PRESSURE_FLOOR) * 100)}% after ~{SUPPLY_PRESSURE_SCALE[c.type] * 3} sold
+                      </span>
+                    ))}
+                  </div>
+                </Section>
+                <Section title="📦 Inventory Expiry">
+                  Crops in your barn expire after <strong>{formatDuration(INVENTORY_SPOIL_MS)}</strong>. Each crop card shows a countdown to the oldest unit's expiry — sell before it hits zero or that unit is lost!
+                </Section>
                 <div style={{ background: 'rgba(200,160,60,0.1)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#c8a96e' }}>
-                  💡 <strong>Strategy:</strong> Stockpile crops during a price dip and sell when the market recovers for maximum profit.
+                  💡 <strong>Strategy:</strong> Stockpile crops during a price dip and sell when the market recovers for maximum profit. Diversify crops to avoid supply pressure penalties.
                 </div>
               </div>
             )}
