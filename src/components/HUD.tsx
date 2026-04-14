@@ -7,11 +7,18 @@ export function HUD() {
   const inventory = useGameStore(s => s.inventory)
   const toggleMarket = useGameStore(s => s.toggleMarket)
   const marketOpen = useGameStore(s => s.marketOpen)
+  const resetGame = useGameStore(s => s.resetGame)
 
   const crops = CropManager.getAllCrops()
   const totalCrops = crops.reduce((acc, c) => acc + (inventory[c.type]?.length ?? 0), 0)
   const compostCount = inventory.compost?.length ?? 0
   const hasInventory = totalCrops > 0 || compostCount > 0
+
+  function handleReset() {
+    if (window.confirm('Start a new game? All progress will be lost.')) {
+      resetGame()
+    }
+  }
 
   return (
     <div style={{
@@ -62,6 +69,23 @@ export function HUD() {
           🏪 Market
         </button>
         <HelpButton />
+        <button
+          onClick={handleReset}
+          style={{
+            background: 'rgba(20,12,5,0.75)',
+            color: '#c87a7a',
+            border: '1px solid rgba(200,80,80,0.4)',
+            borderRadius: 10,
+            padding: '6px 12px',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          }}
+        >
+          🔄 New Game
+        </button>
       </div>
     </div>
   )

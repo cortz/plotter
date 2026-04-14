@@ -115,6 +115,7 @@ export interface GameActions {
   setTooltip: (tooltip: TooltipData | null) => void
   toggleMarket: () => void
   loadGame: () => void
+  resetGame: () => void
 }
 
 type Store = GameState & GameActions
@@ -596,6 +597,30 @@ export const useGameStore = create<Store>((set, get) => ({
       currentSeason: season,
       seasonStartedAt: saved.seasonStartedAt ?? Date.now(),
       seasonSoldCounts: saved.seasonSoldCounts ?? createInitialSoldCounts(),
+    })
+  },
+
+  resetGame: () => {
+    SaveManager.clear()
+    set({
+      grid: createInitialGrid(),
+      plots: {},
+      buildings: {},
+      balance: STARTING_BALANCE,
+      inventory: createInitialInventory(),
+      selectedTile: null,
+      selectedTiles: [],
+      buildingMenuTile: null,
+      marketOpen: false,
+      tooltip: null,
+      marketPrices: initialPrices,
+      priceHistories: initialHistories,
+      lastMarketEvent: null,
+      lastSpoilEvent: null,
+      lastInventoryExpireEvent: null,
+      currentSeason: 'spring' as Season,
+      seasonStartedAt: Date.now(),
+      seasonSoldCounts: createInitialSoldCounts(),
     })
   },
 }))
