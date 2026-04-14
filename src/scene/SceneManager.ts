@@ -4,12 +4,12 @@ import { CropManager } from '../modules/CropManager'
 import { SEASON_CONFIGS } from '../modules/SeasonManager'
 import { BUILDING_DEFS } from '../modules/BuildingManager'
 
-const GRID_SIZE = 9
+const GRID_SIZE = 15
 const TILE_SIZE = 1
 const TILE_GAP = 0.06
 const DRAG_THRESHOLD = 5
 const MIN_FRUSTUM = 7
-const MAX_FRUSTUM = 22
+const MAX_FRUSTUM = 34
 
 // Dynamic colors — updated by setSeason()
 let COLORS: Record<string, number> = {
@@ -37,8 +37,8 @@ export class SceneManager {
   private lastMouse = { x: 0, y: 0 }
   private dragStartTile: { x: number; y: number } | null = null
   private selectionKeys = new Set<string>()
-  private frustumSize = 14
-  // Camera look target (center of 9x9 grid)
+  private frustumSize = 20
+  // Camera look target (center of 15x15 grid)
   private lookTarget = new THREE.Vector3(
     ((GRID_SIZE - 1) / 2) * (TILE_SIZE + TILE_GAP),
     0,

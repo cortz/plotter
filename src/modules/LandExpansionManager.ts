@@ -1,7 +1,7 @@
 import type { TileData } from '../types'
 
-const GRID_SIZE = 9
-const CENTER = Math.floor(GRID_SIZE / 2) // 4
+const GRID_SIZE = 15
+const CENTER = Math.floor(GRID_SIZE / 2) // 7
 const BASE_COST = 80
 const COST_EXPONENT = 1.9
 

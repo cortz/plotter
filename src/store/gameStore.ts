@@ -7,7 +7,7 @@ import { marketPriceEngine } from '../modules/MarketPriceEngine'
 import { getAdjustedGrowDuration, SEASON_CONFIGS } from '../modules/SeasonManager'
 import { BUILDING_DEFS, BARN_BONUS, getEffectiveGrowDuration, tileDistance } from '../modules/BuildingManager'
 
-const GRID_SIZE = 9
+const GRID_SIZE = 15
 const STARTING_BALANCE = 200
 
 /** Compute the absolute timestamp when a crop at (x,y) will be harvestable.
@@ -60,9 +60,10 @@ function refreshHarvestableAt(
 }
 
 function createInitialGrid(): TileData[][] {
+  const center = Math.floor(GRID_SIZE / 2)
   return Array.from({ length: GRID_SIZE }, (_, y) =>
     Array.from({ length: GRID_SIZE }, (_, x) => {
-      const inCenter = x >= 3 && x <= 5 && y >= 3 && y <= 5
+      const inCenter = x >= center - 1 && x <= center + 1 && y >= center - 1 && y <= center + 1
       return { x, y, type: inCenter ? ('unlocked' as const) : ('locked' as const) }
     })
   )
