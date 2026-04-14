@@ -9,8 +9,8 @@ export function HUD() {
   const marketOpen = useGameStore(s => s.marketOpen)
 
   const crops = CropManager.getAllCrops()
-  const totalCrops = crops.reduce((acc, c) => acc + (inventory[c.type] ?? 0), 0)
-  const compostCount = inventory.compost ?? 0
+  const totalCrops = crops.reduce((acc, c) => acc + (inventory[c.type]?.length ?? 0), 0)
+  const compostCount = inventory.compost?.length ?? 0
   const hasInventory = totalCrops > 0 || compostCount > 0
 
   return (
@@ -28,9 +28,9 @@ export function HUD() {
 
         {hasInventory && (
           <Panel>
-            {crops.filter(c => (inventory[c.type] ?? 0) > 0).map(c => (
+            {crops.filter(c => (inventory[c.type]?.length ?? 0) > 0).map(c => (
               <span key={c.type} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                {c.emoji} <strong>{inventory[c.type]}</strong>
+                {c.emoji} <strong>{inventory[c.type].length}</strong>
               </span>
             ))}
             {compostCount > 0 && (

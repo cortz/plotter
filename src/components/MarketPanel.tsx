@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
-import { CropManager } from '../modules/CropManager'
+import { CropManager, getSupplyPressureMod, INVENTORY_SPOIL_MS } from '../modules/CropManager'
 import { BARN_BONUS } from '../modules/BuildingManager'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import type { CropType } from '../types'
@@ -13,7 +14,16 @@ export function MarketPanel() {
   const priceHistories = useGameStore(s => s.priceHistories)
   const lastMarketEvent = useGameStore(s => s.lastMarketEvent)
   const buildings = useGameStore(s => s.buildings)
+  const seasonSoldCounts = useGameStore(s => s.seasonSoldCounts)
   const sellCrop = useGameStore(s => s.sellCrop)
+
+  // Live clock for expiry countdowns — ticks every second
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!marketOpen) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [marketOpen])
 
   useEscapeKey(toggleMarket)
 
@@ -90,7 +100,8 @@ export function MarketPanel() {
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {crops.map(crop => {
           const ct = crop.type as CropType
-          const count = inventory[ct] ?? 0
+          const units = inventory[ct] ?? []
+          const count = units.length
           const price = marketPrices[ct] ?? crop.sellPrice
           const history = priceHistories[ct] ?? [price]
           const prev = history.length >= 2 ? history[history.length - 2] : price
@@ -98,8 +109,13 @@ export function MarketPanel() {
           const trending = price >= prev
           const allHigh = Math.max(...history)
           const allLow = Math.min(...history)
-          const effectivePrice = hasBarn ? Math.round(price * BARN_BONUS) : price
+          const barnBonus = hasBarn ? BARN_BONUS : 1
+          const supplyMod = getSupplyPressureMod(seasonSoldCounts?.[ct] ?? 0, ct)
+          const effectivePrice = Math.round(price * barnBonus * supplyMod)
           const revenue = count * effectivePrice
+          const supplyPct = Math.round((1 - supplyMod) * 100)
+          const oldestTs = count > 0 ? Math.min(...units) : null
+          const expiresIn = oldestTs != null ? Math.max(0, INVENTORY_SPOIL_MS - (now - oldestTs)) : null
 
           return (
             <div key={ct} style={{
@@ -143,9 +159,25 @@ export function MarketPanel() {
                 <span>▼ Low: <span style={{ color: '#aaa' }}>{Math.round(allLow)}</span></span>
                 <span>In Barn: <span style={{ color: count > 0 ? '#ffd700' : '#666' }}>{count}</span></span>
               </div>
-              {hasBarn && (
+              {hasBarn && supplyMod === 1 && (
                 <div style={{ fontSize: 11, color: '#9dcc7d', marginBottom: 6 }}>
                   🌾 Barn bonus: {price} → {effectivePrice} 💰 (+{Math.round((BARN_BONUS - 1) * 100)}%)
+                </div>
+              )}
+              {supplyMod < 1 && (
+                <div style={{ fontSize: 11, color: '#e8a040', marginBottom: 4 }}>
+                  ⚠️ Oversupply −{supplyPct}% · effective price: {effectivePrice} 💰
+                  {hasBarn && <span style={{ color: '#9dcc7d' }}> (barn +{Math.round((BARN_BONUS - 1) * 100)}% included)</span>}
+                </div>
+              )}
+              {expiresIn != null && expiresIn > 0 && (
+                <div style={{ fontSize: 11, color: expiresIn < 60_000 ? '#ff7d7d' : '#c8903a', marginBottom: 6 }}>
+                  ⏳ Oldest unit expires in {formatDuration(expiresIn)}
+                </div>
+              )}
+              {expiresIn === 0 && (
+                <div style={{ fontSize: 11, color: '#ff7d7d', marginBottom: 6 }}>
+                  ⚠️ Units expiring now — sell immediately!
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8 }}>

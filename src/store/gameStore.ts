@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { CropType, TileData, PlotState, TooltipData, MarketEvent, Season, BuildingData, InventoryItem } from '../types'
-import { CropManager, SPOIL_DURATION_MS, COMPOST_GROWTH_MOD } from '../modules/CropManager'
+import { CropManager, SPOIL_DURATION_MS, COMPOST_GROWTH_MOD, INVENTORY_SPOIL_MS, getSupplyPressureMod } from '../modules/CropManager'
 import { SaveManager } from '../modules/SaveManager'
 import { LandExpansionManager } from '../modules/LandExpansionManager'
 import { marketPriceEngine } from '../modules/MarketPriceEngine'
@@ -68,8 +68,12 @@ function createInitialGrid(): TileData[][] {
   )
 }
 
-function createInitialInventory(): Record<InventoryItem, number> {
-  return { wheat: 0, corn: 0, pumpkin: 0, compost: 0 }
+function createInitialInventory(): Record<InventoryItem, number[]> {
+  return { wheat: [], corn: [], pumpkin: [], compost: [] }
+}
+
+function createInitialSoldCounts(): Record<CropType, number> {
+  return { wheat: 0, corn: 0, pumpkin: 0 }
 }
 
 export interface GameState {
@@ -77,7 +81,7 @@ export interface GameState {
   plots: Record<string, PlotState>
   buildings: Record<string, BuildingData>
   balance: number
-  inventory: Record<InventoryItem, number>
+  inventory: Record<InventoryItem, number[]>
   selectedTile: { x: number; y: number } | null
   selectedTiles: { x: number; y: number }[]
   buildingMenuTile: { x: number; y: number } | null
@@ -87,8 +91,10 @@ export interface GameState {
   priceHistories: Record<CropType, number[]>
   lastMarketEvent: MarketEvent | null
   lastSpoilEvent: { cropType: CropType; firedAt: number } | null
+  lastInventoryExpireEvent: { cropType: CropType; count: number; firedAt: number } | null
   currentSeason: Season
   seasonStartedAt: number
+  seasonSoldCounts: Record<CropType, number>
 }
 
 export interface GameActions {
@@ -125,11 +131,32 @@ function persist(state: GameState) {
     lastMarketEvent: state.lastMarketEvent,
     currentSeason: state.currentSeason,
     seasonStartedAt: state.seasonStartedAt,
+    seasonSoldCounts: state.seasonSoldCounts,
   })
 }
 
 const initialPrices = marketPriceEngine.getAllPrices()
 const initialHistories = marketPriceEngine.getAllHistories()
+
+/**
+ * Migrate saved inventory from the old format (Record<InventoryItem, number>)
+ * to the new per-unit timestamp format (Record<InventoryItem, number[]>).
+ * Loaded items get a timestamp of now, giving them the full 15 min before expiry.
+ */
+function migrateInventory(raw: Record<string, unknown>): Record<InventoryItem, number[]> {
+  const now = Date.now()
+  const result: Record<InventoryItem, number[]> = { wheat: [], corn: [], pumpkin: [], compost: [] }
+  for (const key of Object.keys(result) as InventoryItem[]) {
+    const val = raw[key]
+    if (Array.isArray(val)) {
+      result[key] = val as number[]
+    } else if (typeof val === 'number' && val > 0) {
+      // Old format: number → create that many units all timestamped now
+      result[key] = Array.from({ length: val }, () => now)
+    }
+  }
+  return result
+}
 
 export const useGameStore = create<Store>((set, get) => ({
   grid: createInitialGrid(),
@@ -146,8 +173,10 @@ export const useGameStore = create<Store>((set, get) => ({
   priceHistories: initialHistories,
   lastMarketEvent: null,
   lastSpoilEvent: null,
+  lastInventoryExpireEvent: null,
   currentSeason: 'spring' as Season,
   seasonStartedAt: Date.now(),
+  seasonSoldCounts: createInitialSoldCounts(),
 
   plantCrop: (x, y, cropType) => {
     const s = get()
@@ -164,11 +193,11 @@ export const useGameStore = create<Store>((set, get) => ({
     const gridWithRoads = newGrid
 
     const now = Date.now()
-    const compostAvailable = s.inventory.compost ?? 0
-    const useCompost = compostAvailable > 0
+    const compostUnits = s.inventory.compost ?? []
+    const useCompost = compostUnits.length > 0
     const compostMod = useCompost ? COMPOST_GROWTH_MOD : 1
     const newInventory = { ...s.inventory }
-    if (useCompost) newInventory.compost = compostAvailable - 1
+    if (useCompost) newInventory.compost = compostUnits.slice(1) // consume 1 compost
 
     const newPlots: Record<string, PlotState> = {
       ...s.plots,
@@ -211,13 +240,13 @@ export const useGameStore = create<Store>((set, get) => ({
     const newGrid = s.grid.map(row => row.map(t => ({ ...t })))
     const newPlots = { ...s.plots }
     const now = Date.now()
-    const compostAvailable = s.inventory.compost ?? 0
+    const compostUnits = s.inventory.compost ?? []
     let compostUsed = 0
 
     for (const { x, y } of validTiles) {
       const key = `${x},${y}`
       newGrid[y][x] = { x, y, type: 'plot' }
-      const useCompost = compostUsed < compostAvailable
+      const useCompost = compostUsed < compostUnits.length
       if (useCompost) compostUsed++
       const compostMod = useCompost ? COMPOST_GROWTH_MOD : 1
       newPlots[key] = {
@@ -234,7 +263,7 @@ export const useGameStore = create<Store>((set, get) => ({
       grid: newGrid,
       plots: newPlots,
       balance: s.balance - totalCost,
-      inventory: { ...s.inventory, compost: compostAvailable - compostUsed },
+      inventory: { ...s.inventory, compost: compostUnits.slice(compostUsed) },
       selectedTiles: [],
     }
     set(next)
@@ -262,7 +291,7 @@ export const useGameStore = create<Store>((set, get) => ({
       (plot?.status === 'growing' && plot.harvestableAt != null && now >= plot.harvestableAt)
     if (!isReady || !plot?.cropType) return
 
-    const newInventory = { ...s.inventory, [plot.cropType]: (s.inventory[plot.cropType] ?? 0) + 1 }
+    const newInventory = { ...s.inventory, [plot.cropType]: [...(s.inventory[plot.cropType] ?? []), now] }
     const newPlots = { ...s.plots, [key]: emptyPlot }
 
     const next: GameState = { ...s, plots: newPlots, inventory: newInventory, selectedTile: null }
@@ -291,7 +320,7 @@ export const useGameStore = create<Store>((set, get) => ({
         plot?.status === 'harvestable' ||
         (plot?.status === 'growing' && plot.harvestableAt != null && now >= plot.harvestableAt)
       if (!isReady || !plot?.cropType) continue
-      newInventory[plot.cropType] = (newInventory[plot.cropType] ?? 0) + 1
+      newInventory[plot.cropType] = [...(newInventory[plot.cropType] ?? []), now]
       newPlots[key] = emptyPlot
     }
 
@@ -320,17 +349,22 @@ export const useGameStore = create<Store>((set, get) => ({
 
   sellCrop: (cropType, amount) => {
     const s = get()
-    const have = s.inventory[cropType] ?? 0
-    const toSell = Math.min(amount, have)
+    const units = s.inventory[cropType] ?? []
+    const toSell = Math.min(amount, units.length)
     if (toSell <= 0) return
 
     const livePrice = s.marketPrices[cropType] ?? CropManager.getCropDefinition(cropType).sellPrice
-    // Find the selected tile position for barn bonus — use selectedTile if set, otherwise check all plots
-    // For market sells we apply barn bonus if ANY barn is on the farm (simplest UX)
     const barnBonus = Object.values(s.buildings).some(b => b.type === 'barn') ? BARN_BONUS : 1
-    const effectivePrice = Math.round(livePrice * barnBonus)
-    const newInventory = { ...s.inventory, [cropType]: have - toSell }
-    const next: GameState = { ...s, inventory: newInventory, balance: s.balance + toSell * effectivePrice }
+    const supplyMod = getSupplyPressureMod(s.seasonSoldCounts[cropType] ?? 0, cropType)
+    const effectivePrice = Math.round(livePrice * barnBonus * supplyMod)
+    const newInventory = { ...s.inventory, [cropType]: units.slice(toSell) } // remove oldest (FIFO)
+    const newSoldCounts = { ...s.seasonSoldCounts, [cropType]: (s.seasonSoldCounts[cropType] ?? 0) + toSell }
+    const next: GameState = {
+      ...s,
+      inventory: newInventory,
+      balance: s.balance + toSell * effectivePrice,
+      seasonSoldCounts: newSoldCounts,
+    }
     set(next)
     persist(next)
   },
@@ -410,12 +444,13 @@ export const useGameStore = create<Store>((set, get) => ({
     const now = Date.now()
     let changed = false
     const newPlots = { ...s.plots }
-    let newCompost = s.inventory.compost ?? 0
+    const newCompostUnits = [...(s.inventory.compost ?? [])]
     let latestSpoilEvent = s.lastSpoilEvent
+    let latestInventoryExpireEvent = s.lastInventoryExpireEvent
 
+    // --- Field spoilage pass ---
     for (const [key, plot] of Object.entries(newPlots)) {
       if (plot.status === 'growing' && plot.cropType && plot.plantedAt) {
-        // harvestableAt is the source of truth; fall back to dynamic calc for old saves
         const isReady = plot.harvestableAt != null
           ? now >= plot.harvestableAt
           : (() => {
@@ -436,10 +471,22 @@ export const useGameStore = create<Store>((set, get) => ({
           changed = true
         }
       } else if (plot.status === 'harvestable' && plot.cropType && plot.spoilsAt != null && now >= plot.spoilsAt) {
-        // Crop has gone past its spoilage window — convert to compost
-        newCompost += 1
+        newCompostUnits.push(now) // field-spoiled crop yields 1 compost unit
         latestSpoilEvent = { cropType: plot.cropType, firedAt: now }
         newPlots[key] = { ...plot, status: 'spoiled', plantedAt: null, harvestableAt: null, spoilsAt: null }
+        changed = true
+      }
+    }
+
+    // --- Inventory expiry pass ---
+    const newInventory = { ...s.inventory, compost: newCompostUnits }
+    for (const cropType of CropManager.getAllCrops().map(c => c.type)) {
+      const units = newInventory[cropType] ?? []
+      const fresh = units.filter((ts: number) => now - ts < INVENTORY_SPOIL_MS)
+      const expired = units.length - fresh.length
+      if (expired > 0) {
+        newInventory[cropType] = fresh
+        latestInventoryExpireEvent = { cropType, count: expired, firedAt: now }
         changed = true
       }
     }
@@ -448,8 +495,9 @@ export const useGameStore = create<Store>((set, get) => ({
       const next: GameState = {
         ...s,
         plots: newPlots,
-        inventory: { ...s.inventory, compost: newCompost },
+        inventory: newInventory,
         lastSpoilEvent: latestSpoilEvent,
+        lastInventoryExpireEvent: latestInventoryExpireEvent,
       }
       set(next)
       persist(next)
@@ -483,7 +531,13 @@ export const useGameStore = create<Store>((set, get) => ({
         ),
       }
     }
-    const next: GameState = { ...s, currentSeason: season, seasonStartedAt: startedAt, plots: updatedPlots }
+    const next: GameState = {
+      ...s,
+      currentSeason: season,
+      seasonStartedAt: startedAt,
+      plots: updatedPlots,
+      seasonSoldCounts: createInitialSoldCounts(), // reset supply pressure each season
+    }
     set(next)
     persist(next)
   },
@@ -533,18 +587,15 @@ export const useGameStore = create<Store>((set, get) => ({
       plots,
       buildings,
       balance: saved.balance ?? STARTING_BALANCE,
-      inventory: {
-        wheat: saved.inventory?.wheat ?? 0,
-        corn: saved.inventory?.corn ?? 0,
-        pumpkin: saved.inventory?.pumpkin ?? 0,
-        compost: saved.inventory?.compost ?? 0,
-      },
+      inventory: migrateInventory(saved.inventory ?? {}),
       marketPrices: saved.marketPrices ?? marketPriceEngine.getAllPrices(),
       priceHistories: saved.priceHistories ?? marketPriceEngine.getAllHistories(),
       lastMarketEvent: saved.lastMarketEvent ?? null,
       lastSpoilEvent: null,
+      lastInventoryExpireEvent: null,
       currentSeason: season,
       seasonStartedAt: saved.seasonStartedAt ?? Date.now(),
+      seasonSoldCounts: saved.seasonSoldCounts ?? createInitialSoldCounts(),
     })
   },
 }))

@@ -8,6 +8,8 @@ const GRID_SIZE = 9
 const TILE_SIZE = 1
 const TILE_GAP = 0.06
 const DRAG_THRESHOLD = 5
+const MIN_FRUSTUM = 7
+const MAX_FRUSTUM = 22
 
 // Dynamic colors — updated by setSeason()
 let COLORS: Record<string, number> = {
@@ -35,6 +37,7 @@ export class SceneManager {
   private lastMouse = { x: 0, y: 0 }
   private dragStartTile: { x: number; y: number } | null = null
   private selectionKeys = new Set<string>()
+  private frustumSize = 14
   // Camera look target (center of 9x9 grid)
   private lookTarget = new THREE.Vector3(
     ((GRID_SIZE - 1) / 2) * (TILE_SIZE + TILE_GAP),
@@ -83,9 +86,8 @@ export class SceneManager {
   }
 
   private getFrustum() {
-    const frustumSize = 14
     const aspect = this.canvas.clientWidth / this.canvas.clientHeight || 1
-    return { frustumSize, aspect }
+    return { frustumSize: this.frustumSize, aspect }
   }
 
   private positionCamera() {
@@ -98,8 +100,15 @@ export class SceneManager {
     this.canvas.addEventListener('mousedown', this.onMouseDown)
     this.canvas.addEventListener('mouseup', this.onMouseUp)
     this.canvas.addEventListener('click', this.onClick)
+    this.canvas.addEventListener('wheel', this.onWheel, { passive: true })
     this.canvas.addEventListener('contextmenu', e => e.preventDefault())
     window.addEventListener('resize', this.onResize)
+  }
+
+  private onWheel = (e: WheelEvent) => {
+    const factor = e.deltaY > 0 ? 1.1 : 0.9
+    this.frustumSize = Math.max(MIN_FRUSTUM, Math.min(MAX_FRUSTUM, this.frustumSize * factor))
+    this.onResize()
   }
 
   private onMouseDown = (e: MouseEvent) => {
@@ -366,6 +375,7 @@ export class SceneManager {
     this.canvas.removeEventListener('mousedown', this.onMouseDown)
     this.canvas.removeEventListener('mouseup', this.onMouseUp)
     this.canvas.removeEventListener('click', this.onClick)
+    this.canvas.removeEventListener('wheel', this.onWheel)
     window.removeEventListener('resize', this.onResize)
     this.renderer.dispose()
   }

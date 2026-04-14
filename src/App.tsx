@@ -9,6 +9,7 @@ import { MarketEventToast } from './components/MarketEventToast'
 import { SeasonBadge } from './components/SeasonBadge'
 import { SeasonTransitionToast } from './components/SeasonTransitionToast'
 import { SpoilToast } from './components/SpoilToast'
+import { InventoryExpireToast } from './components/InventoryExpireToast'
 import { useGameStore } from './store/gameStore'
 
 function App() {
@@ -38,6 +39,7 @@ function App() {
       <MarketEventToast />
       <SeasonTransitionToast />
       <SpoilToast />
+      <InventoryExpireToast />
 
       {/* Season badge — top center */}
       <div style={{

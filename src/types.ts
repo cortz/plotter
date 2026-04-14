@@ -81,11 +81,12 @@ export interface PersistedState {
   plots: Record<string, PlotState>
   buildings: Record<string, BuildingData>
   balance: number
-  inventory: Record<InventoryItem, number>
+  inventory: Record<InventoryItem, number[]>
   marketPrices: Record<CropType, number>
   priceHistories: Record<CropType, number[]>
   lastMarketEvent: MarketEvent | null
   currentSeason: Season
   seasonStartedAt: number
+  seasonSoldCounts: Record<CropType, number>
 }
 
